@@ -117,12 +117,13 @@ function toggleSound(checkbox) {
     soundEnabled = checkbox.checked;
 }
 
-// ================= ICE ARENA (MULTIPLIER WITH WEBSOCKET) =================
+// ================= ICE ARENA (OPTIMIZED MULTIPLAYER) =================
 let arenaState = 'IDLE'; // IDLE, WAITING, SPINNING, FINISHED
 let arenaPlayers = []; 
 let arenaTotalBank = 0;
 let arenaTimer = 15;
 let arenaTimerInterval = null;
+let winningPlayerId = null;
 
 const arenaCanvas = document.getElementById('arenaCanvas');
 const arenaCtx = arenaCanvas ? arenaCanvas.getContext('2d') : null;
@@ -133,22 +134,15 @@ const arenaTotalBankEl = document.getElementById('arenaTotalBank');
 
 let puck = { x: 170, y: 90, vx: 0, vy: 0, radius: 10, speed: 0 };
 let arenaAnimId = null;
+let spinStartTimeMs = 0;
 
-// Подключение к вашему WebSocket серверу (для локального теста: ws://localhost:8080)
+// Подключение к вашему серверу Render
 const ws = new WebSocket('wss://game-backend-ht4v.onrender.com');
+
 ws.onopen = () => {
-    console.log("Соединение с мультиплеер-сервером Айс Арены установлено!");
+    console.log("WebSocket подключен к Айс Арене!");
 };
 
-ws.onclose = () => {
-    console.log("Соединение с сервером потеряно.");
-};
-
-ws.onerror = (error) => {
-    console.error("Ошибка WebSocket:", error);
-};
-
-// Получаем сообщения от бэкенд-сервера
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
@@ -157,15 +151,17 @@ ws.onmessage = (event) => {
         arenaTotalBank = data.totalBank || 0;
         updateArenaSectors();
         drawArenaFrame();
+        renderArenaParticipantsList();
     }
     
     if (data.type === 'TIMER_UPDATE') {
         arenaTimer = data.timer;
-        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с`;
+        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с (нужно 2 игрока)`;
     }
 
     if (data.type === 'SPIN_START') {
-        triggerServerSpinAnimation(data.stopX, data.winner, data.netWin);
+        winningPlayerId = data.winnerId;
+        triggerServerSpinAnimation(data.stopX, data.winnerName, data.netWin);
     }
 
     if (data.type === 'RESET_ROOM') {
@@ -183,6 +179,8 @@ function resetArenaVisuals() {
     arenaState = 'IDLE';
     arenaPlayers = [];
     arenaTotalBank = 0;
+    winningPlayerId = null;
+    puck.x = -50; puck.y = -50; // Прячем шайбу до старта
     if (arenaTimerInterval) clearInterval(arenaTimerInterval);
     if (arenaActionBtn) {
         arenaActionBtn.style.display = 'block';
@@ -190,9 +188,10 @@ function resetArenaVisuals() {
         arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
         arenaActionBtn.onclick = joinArenaGame;
     }
-    if (arenaTimerText) arenaTimerText.innerText = "Ожидание игроков...";
+    if (arenaTimerText) arenaTimerText.innerText = "Ожидание второго игрока или бота...";
     updateArenaSectors();
     drawArenaFrame();
+    renderArenaParticipantsList();
 }
 
 function joinArenaGame() {
@@ -205,7 +204,6 @@ function joinArenaGame() {
     score = parseFloat((score - betVal).toFixed(2));
     updateBalance();
 
-    // Отправляем ставку на сервер
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             type: 'JOIN_ARENA',
@@ -219,7 +217,7 @@ function joinArenaGame() {
     }
 
     if (arenaActionBtn) {
-        arenaActionBtn.innerText = "Вы в игре! Ожидание...";
+        arenaActionBtn.innerText = "Вы в игре! Ожидание соперника...";
         arenaActionBtn.style.background = "#64748b";
     }
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
@@ -253,7 +251,7 @@ function drawArenaFrame() {
         arenaCtx.font = '14px sans-serif';
         arenaCtx.textAlign = 'center';
         arenaCtx.textBaseline = 'middle';
-        arenaCtx.fillText("Ожидание ставок игроков...", 170, 90);
+        arenaCtx.fillText("Сделайте ставку для начала игры...", 170, 90);
         return;
     }
 
@@ -267,47 +265,140 @@ function drawArenaFrame() {
         p.xStart = currentX;
         p.xEnd = currentX + sliceWidth;
 
+        let isWinner = (winningPlayerId && p.id === winningPlayerId);
+        let isLoser = (winningPlayerId && p.id !== winningPlayerId);
+
+        arenaCtx.save();
+        if (isLoser) arenaCtx.globalAlpha = 0.3; // Затемняем проигравших
+
         arenaCtx.fillStyle = p.color || '#3b82f6';
         arenaCtx.fillRect(currentX, 0, sliceWidth, fieldHeight);
 
-        arenaCtx.strokeStyle = '#0f172a';
-        arenaCtx.lineWidth = 2;
-        arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
+        // Ярко-белая обводка для победителя
+        if (isWinner) {
+            arenaCtx.strokeStyle = '#ffffff';
+            arenaCtx.lineWidth = 4;
+            arenaCtx.shadowColor = '#ffffff';
+            arenaCtx.shadowBlur = 15;
+            arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
+            arenaCtx.shadowBlur = 0;
+        } else {
+            arenaCtx.strokeStyle = '#0f172a';
+            arenaCtx.lineWidth = 2;
+            arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
+        }
 
-        let percent = Math.round((p.bet / total) * 100);
-        arenaCtx.fillStyle = '#fff';
-        arenaCtx.font = 'bold 11px sans-serif';
-        arenaCtx.textAlign = 'center';
-        arenaCtx.textBaseline = 'middle';
-        
-        arenaCtx.fillText(p.name.substring(0, 8), currentX + sliceWidth / 2, fieldHeight / 2 - 8);
-        arenaCtx.font = '10px sans-serif';
-        arenaCtx.fillStyle = 'rgba(255,255,255,0.8)';
-        arenaCtx.fillText(percent + '%', currentX + sliceWidth / 2, fieldHeight / 2 + 10);
+        // Рендерим аватарку/инициалы в центре зоны, ЕСЛИ шанс игрока > 10%
+        let percent = (p.bet / total) * 100;
+        if (percent > 10) {
+            let avatarX = currentX + sliceWidth / 2;
+            let avatarY = fieldHeight / 2;
+            
+            arenaCtx.beginPath();
+            arenaCtx.arc(avatarX, avatarY, 16, 0, Math.PI * 2);
+            arenaCtx.fillStyle = '#0f172a';
+            arenaCtx.fill();
+            arenaCtx.lineWidth = 2;
+            arenaCtx.strokeStyle = isWinner ? '#ffffff' : 'rgba(255,255,255,0.7)';
+            arenaCtx.stroke();
 
+            arenaCtx.fillStyle = '#fff';
+            arenaCtx.font = 'bold 11px sans-serif';
+            arenaCtx.textAlign = 'center';
+            arenaCtx.textBaseline = 'middle';
+            let initials = p.name ? p.name.substring(0, 2).toUpperCase() : "AI";
+            arenaCtx.fillText(initials, avatarX, avatarY);
+        }
+
+        arenaCtx.restore();
         currentX += sliceWidth;
     });
 
-    // Рисуем шайбу
-    arenaCtx.beginPath();
-    arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
-    arenaCtx.fillStyle = '#ffffff';
-    arenaCtx.shadowColor = '#38bdf8';
-    arenaCtx.shadowBlur = 12;
-    arenaCtx.fill();
-    arenaCtx.shadowBlur = 0;
-    arenaCtx.lineWidth = 2;
-    arenaCtx.strokeStyle = '#0f172a';
-    arenaCtx.stroke();
+    // Рисуем шайбу, если игра идет или завершена
+    if (arenaState === 'SPINNING' || arenaState === 'FINISHED') {
+        arenaCtx.beginPath();
+        arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
+        arenaCtx.fillStyle = '#ffffff';
+        arenaCtx.shadowColor = '#38bdf8';
+        arenaCtx.shadowBlur = 12;
+        arenaCtx.fill();
+        arenaCtx.shadowBlur = 0;
+        arenaCtx.lineWidth = 2;
+        arenaCtx.strokeStyle = '#0f172a';
+        arenaCtx.stroke();
+
+        // Стрелочка направления полета (первые 3 секунды вращения)
+        if (arenaState === 'SPINNING' && (Date.now() - spinStartTimeMs < 3000)) {
+            let angle = Math.atan2(puck.vy, puck.vx);
+            arenaCtx.save();
+            arenaCtx.translate(puck.x, puck.y);
+            arenaCtx.rotate(angle);
+            arenaCtx.beginPath();
+            arenaCtx.moveTo(15, 0);
+            arenaCtx.lineTo(25, -6);
+            arenaCtx.lineTo(25, 6);
+            arenaCtx.fillStyle = '#facc15'; // Ярко-желтая стрелка
+            arenaCtx.fill();
+            arenaCtx.restore();
+        }
+    }
+}
+
+// Рендер списка участников под ареной
+function renderArenaParticipantsList() {
+    let container = document.getElementById('arenaParticipantsList');
+    if (!container) {
+        // Если контейнера еще нет в HTML, создадим его динамически под канвасом
+        const canvasParent = arenaCanvas ? arenaCanvas.parentNode : null;
+        if (canvasParent) {
+            container = document.createElement('div');
+            container.id = 'arenaParticipantsList';
+            container.style.cssText = "margin-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%; max-height: 120px; overflow-y: auto;";
+            canvasParent.appendChild(container);
+        } else {
+            return;
+        }
+    }
+
+    container.innerHTML = '';
+    let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
+
+    arenaPlayers.forEach(p => {
+        let percent = total > 0 ? Math.round((p.bet / total) * 100) : 0;
+        let isWinner = (winningPlayerId && p.id === winningPlayerId);
+        let isLoser = (winningPlayerId && p.id !== winningPlayerId);
+
+        let item = document.createElement('div');
+        item.style.cssText = `
+            display: flex; justify-content: space-between; align-items: center;
+            background: #1e293b; padding: 6px 10px; border-radius: 8px;
+            font-size: 13px; border-left: 4px solid ${p.color};
+            opacity: ${isLoser ? '0.3' : '1'};
+            box-shadow: ${isWinner ? '0 0 10px #ffffff' : 'none'};
+        `;
+
+        item.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: bold; color: #fff;">${p.name}</span>
+            </div>
+            <div style="display: flex; gap: 12px; color: #94a3b8;">
+                <span>Ставка: <strong style="color: #10b981;">${p.bet.toFixed(2)} GRAM</strong></span>
+                <span>Шанс: <strong style="color: #38bdf8;">${percent}%</strong></span>
+            </div>
+        `;
+        container.appendChild(item);
+    });
 }
 
 function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
     arenaState = 'SPINNING';
+    spinStartTimeMs = Date.now();
     if (arenaTimerText) arenaTimerText.innerText = "Шайба запущена!";
     if (arenaActionBtn) arenaActionBtn.style.display = 'none';
 
-    puck.x = 170; 
-    puck.y = 90;
+    // Появляется в случайном месте на карте при старте
+    puck.x = Math.random() * 280 + 30; 
+    puck.y = Math.random() * 120 + 30;
     
     let targetX = targetStopX;
     let targetY = 90;
@@ -316,7 +407,7 @@ function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
     let dy = targetY - puck.y;
     let distance = Math.sqrt(dx * dx + dy * dy);
     
-    let speed = 8;
+    let speed = 9;
     puck.vx = (dx / distance) * speed;
     puck.vy = (dy / distance) * speed;
 
@@ -329,6 +420,8 @@ function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
             puck.x = targetX;
             puck.y = targetY;
             cancelAnimationFrame(arenaAnimId);
+            arenaState = 'FINISHED';
+            drawArenaFrame();
             showServerWinner(winnerName, netWin);
             return;
         }
@@ -343,7 +436,10 @@ function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
 function showServerWinner(winnerName, netWin) {
     let numericNetWin = parseFloat(netWin);
 
-    if (winnerName === userName) {
+    // Проверяем, победил ли текущий пользователь (по ID или по имени)
+    let userWon = arenaPlayers.some(p => p.id === userId && p.id === winningPlayerId) || (winnerName === userName);
+
+    if (userWon) {
         score = parseFloat((score + numericNetWin).toFixed(2));
         updateBalance();
         if (arenaTimerText) arenaTimerText.innerText = `Вы выиграли +${numericNetWin.toFixed(2)} GRAM!`;
@@ -352,6 +448,8 @@ function showServerWinner(winnerName, netWin) {
         if (arenaTimerText) arenaTimerText.innerText = `Победил ${winnerName}! Выигрыш: ${numericNetWin.toFixed(2)} GRAM`;
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
     }
+
+    renderArenaParticipantsList();
 
     if (arenaActionBtn) {
         arenaActionBtn.style.display = 'block';
