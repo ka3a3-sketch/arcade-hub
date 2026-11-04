@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Arcade Hub GRAM</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Подключаем TON Connect UI SDK через CDN -->
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <style>
         :root {
             --bg-color: #070913;
@@ -519,8 +521,9 @@
             </div>
             <button class="cashback-btn" onclick="claimCashback()">Получить <span id="cashbackBtnVal">0.00</span> GRAM</button>
 
-            <div class="settings-item-row" onclick="alert('Пополнение через бота!')">
-                <span>Пополнить баланс</span>
+            <!-- Кнопка вызова модального окна пополнения через TON Connect -->
+            <div class="settings-item-row" onclick="openDepositModal()">
+                <span>Пополнить баланс (TON)</span>
                 <span style="color: var(--text-sec);">&rsaquo;</span>
             </div>
 
@@ -534,7 +537,36 @@
         </div>
     </div>
 
-    <!-- НИЖНЯЯ ПАНЕЛЬ С ИКОНКАМИ SVG -->
+    <!-- Модальное окно пополнения TON Connect -->
+    <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,19,0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
+        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:24px; padding:20px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:18px;">Пополнение GRAM</h3>
+                <span onclick="closeDepositModal()" style="font-size:22px; cursor:pointer; color:var(--text-sec);">&times;</span>
+            </div>
+            <p style="margin:0; font-size:12px; color:var(--text-sec);">1 TON = 100 GRAM. Выберите пакет или введите сумму:</p>
+            
+            <!-- Кнопка подключения TON Connect -->
+            <div id="ton-connect-button" style="display:flex; justify-content:center; margin: 5px 0;"></div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button class="preset-btn" onclick="selectDepositTon(0.5)">0.5 TON (50 G)</button>
+                <button class="preset-btn" onclick="selectDepositTon(1.0)">1.0 TON (100 G)</button>
+                <button class="preset-btn" onclick="selectDepositTon(5.0)">5.0 TON (500 G)</button>
+                <button class="preset-btn" onclick="selectDepositTon(10.0)">10.0 TON (1000 G)</button>
+            </div>
+
+            <div class="pill-box" style="width:100%;">
+                <span>TON</span>
+                <input type="number" id="customTonInput" value="1.0" min="0.1" step="0.1">
+                <span>СУММА</span>
+            </div>
+
+            <button class="main-action-btn" onclick="sendTonDeposit()">Оплатить TON</button>
+        </div>
+    </div>
+
+    <!-- Нижняя панель с иконками SVG -->
     <div class="nav-bar">
         <button class="nav-item active" onclick="switchNav('games', this)">
             <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>

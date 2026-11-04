@@ -821,3 +821,80 @@ function revealAllMines() {
         else if (!cell.classList.contains('safe')) { cell.innerText = '.'; cell.style.opacity = '0.4'; }
     });
 }
+
+
+// ================= TON CONNECT ПОПОЛНЕНИЕ (1 TON = 1 GRAM) =================
+
+// Инициализация TON Connect UI (ищет #ton-connect-button внутри модального окна)
+const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+    manifestUrl: 'https://ka3a3-sketch.github.io/arcade-hub/tonconnect-manifest.json',
+    buttonRootId: 'ton-connect-button'
+});
+
+function openDepositModal() {
+    let modal = document.getElementById('depositModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeDepositModal() {
+    let modal = document.getElementById('depositModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function selectDepositTon(val) {
+    let input = document.getElementById('customTonInput');
+    if (input) input.value = val.toFixed(1);
+}
+
+async function sendTonDeposit() {
+    if (!tonConnectUI.connected) {
+        alert('Пожалуйста, подключите ваш кошелек с помощью кнопки вверху модального окна!');
+        return;
+    }
+
+    let input = document.getElementById('customTonInput');
+    let gramAmount = parseFloat(input ? input.value : 1.0); // 1 TON = 1 GRAM
+
+    if (isNaN(gramAmount) || gramAmount <= 0) {
+        alert('Введите корректную сумму!');
+        return;
+    }
+
+    // Переводим GRAM в наноторы (1 TON/GRAM = 1,000,000,000 нано)
+    let nanoAmount = Math.floor(gramAmount * 1_000_000_000).toString();
+    
+    // ВНИМАНИЕ: Замените на ваш реальный адрес кошелька в сети TON!
+    const MERCHANT_WALLET = 'UQBDFjzLt03Y8uPDwLwQF7y_3DQI0hLA6-iV8srfE31_MweH'; 
+
+    const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 600, // Срок жизни транзакции 10 минут
+        messages: [
+            {
+                address: MERCHANT_WALLET,
+                amount: nanoAmount,
+                payload: "te6cckEBAQEADgAAGiB1c2VyX2lk_" + userId // Метка с ID пользователя
+            }
+        ]
+    };
+
+    try {
+        closeDepositModal();
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
+        
+        // Запрос подписи транзакции в кошельке игрока
+        const result = await tonConnectUI.sendTransaction(transaction);
+        
+        console.log("Транзакция отправлена:", result);
+
+        // Начисляем GRAM игроку 1 к 1
+        score += gramAmount;
+        updateBalance();
+
+        alert(`Оплата прошла успешно! Вам зачислено +${gramAmount.toFixed(2)} GRAM.`);
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+    } catch (e) {
+        console.error("Ошибка транзакции:", e);
+        alert('Оплата была отменена или произошла ошибка.');
+    }
+}
