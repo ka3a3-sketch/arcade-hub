@@ -70,6 +70,9 @@ function openGame(gameName) {
     } else if (gameName === 'escape') {
         openScreen('escape');
         resetEscapeVisuals();
+    } else if (gameName === 'iceArena') {
+        openScreen('iceArena');
+        resetArenaVisuals();
     }
 }
 
@@ -113,6 +116,251 @@ let soundEnabled = true;
 function toggleSound(checkbox) {
     soundEnabled = checkbox.checked;
 }
+
+// ================= ICE ARENA (MULTIPLIER WITH WEBSOCKET) =================
+let arenaState = 'IDLE'; // IDLE, WAITING, SPINNING, FINISHED
+let arenaPlayers = []; 
+let arenaTotalBank = 0;
+let arenaTimer = 15;
+let arenaTimerInterval = null;
+
+const arenaCanvas = document.getElementById('arenaCanvas');
+const arenaCtx = arenaCanvas ? arenaCanvas.getContext('2d') : null;
+const arenaBetInput = document.getElementById('arenaBetInput');
+const arenaActionBtn = document.getElementById('arenaActionBtn');
+const arenaTimerText = document.getElementById('arenaTimerText');
+const arenaTotalBankEl = document.getElementById('arenaTotalBank');
+
+let puck = { x: 170, y: 90, vx: 0, vy: 0, radius: 10, speed: 0 };
+let arenaAnimId = null;
+
+// Подключение к вашему WebSocket серверу (для локального теста: ws://localhost:8080)
+const ws = new WebSocket('wss://game-backend-ht4v.onrender.com');
+ws.onopen = () => {
+    console.log("Соединение с мультиплеер-сервером Айс Арены установлено!");
+};
+
+ws.onclose = () => {
+    console.log("Соединение с сервером потеряно.");
+};
+
+ws.onerror = (error) => {
+    console.error("Ошибка WebSocket:", error);
+};
+
+// Получаем сообщения от бэкенд-сервера
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.type === 'INIT' || data.type === 'ROOM_UPDATE') {
+        arenaPlayers = data.room ? data.room.players : data.players;
+        arenaTotalBank = data.totalBank || 0;
+        updateArenaSectors();
+        drawArenaFrame();
+    }
+    
+    if (data.type === 'TIMER_UPDATE') {
+        arenaTimer = data.timer;
+        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с`;
+    }
+
+    if (data.type === 'SPIN_START') {
+        triggerServerSpinAnimation(data.stopX, data.winner, data.netWin);
+    }
+
+    if (data.type === 'RESET_ROOM') {
+        resetArenaVisuals();
+    }
+};
+
+function setArenaBet(val) {
+    if (arenaState === 'SPINNING') return;
+    if (arenaBetInput) arenaBetInput.value = val.toFixed(2);
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+function resetArenaVisuals() {
+    arenaState = 'IDLE';
+    arenaPlayers = [];
+    arenaTotalBank = 0;
+    if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+    if (arenaActionBtn) {
+        arenaActionBtn.style.display = 'block';
+        arenaActionBtn.innerText = "Сделать ставку и войти";
+        arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
+        arenaActionBtn.onclick = joinArenaGame;
+    }
+    if (arenaTimerText) arenaTimerText.innerText = "Ожидание игроков...";
+    updateArenaSectors();
+    drawArenaFrame();
+}
+
+function joinArenaGame() {
+    if (arenaState === 'SPINNING') return;
+    let betVal = parseFloat(parseFloat(arenaBetInput.value || 0.25).toFixed(2));
+    
+    if (betVal < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); return; }
+    if (score < betVal) { alert('Недостаточно GRAM на балансе!'); return; }
+
+    score = parseFloat((score - betVal).toFixed(2));
+    updateBalance();
+
+    // Отправляем ставку на сервер
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'JOIN_ARENA',
+            userId: userId,
+            name: userName,
+            bet: betVal,
+            color: '#3b82f6'
+        }));
+    } else {
+        alert('Нет соединения с сервером!');
+    }
+
+    if (arenaActionBtn) {
+        arenaActionBtn.innerText = "Вы в игре! Ожидание...";
+        arenaActionBtn.style.background = "#64748b";
+    }
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+}
+
+function updateArenaSectors() {
+    let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
+    arenaTotalBank = total;
+    if (arenaTotalBankEl) arenaTotalBankEl.innerText = arenaTotalBank.toFixed(2);
+
+    let currentX = 0;
+    let fieldWidth = 340;
+    arenaPlayers.forEach(p => {
+        let widthRatio = total > 0 ? (p.bet / total) : 0;
+        let sliceWidth = fieldWidth * widthRatio;
+        p.xStart = currentX;
+        p.xEnd = currentX + sliceWidth;
+        currentX += sliceWidth;
+    });
+}
+
+function drawArenaFrame() {
+    if (!arenaCtx) return;
+    arenaCtx.clearRect(0, 0, 340, 180);
+
+    let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
+    if (total <= 0) {
+        arenaCtx.fillStyle = '#1e293b';
+        arenaCtx.fillRect(0, 0, 340, 180);
+        arenaCtx.fillStyle = '#64748b';
+        arenaCtx.font = '14px sans-serif';
+        arenaCtx.textAlign = 'center';
+        arenaCtx.textBaseline = 'middle';
+        arenaCtx.fillText("Ожидание ставок игроков...", 170, 90);
+        return;
+    }
+
+    let fieldWidth = 340;
+    let fieldHeight = 180;
+    let currentX = 0;
+
+    arenaPlayers.forEach(p => {
+        let widthRatio = p.bet / total;
+        let sliceWidth = fieldWidth * widthRatio;
+        p.xStart = currentX;
+        p.xEnd = currentX + sliceWidth;
+
+        arenaCtx.fillStyle = p.color || '#3b82f6';
+        arenaCtx.fillRect(currentX, 0, sliceWidth, fieldHeight);
+
+        arenaCtx.strokeStyle = '#0f172a';
+        arenaCtx.lineWidth = 2;
+        arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
+
+        let percent = Math.round((p.bet / total) * 100);
+        arenaCtx.fillStyle = '#fff';
+        arenaCtx.font = 'bold 11px sans-serif';
+        arenaCtx.textAlign = 'center';
+        arenaCtx.textBaseline = 'middle';
+        
+        arenaCtx.fillText(p.name.substring(0, 8), currentX + sliceWidth / 2, fieldHeight / 2 - 8);
+        arenaCtx.font = '10px sans-serif';
+        arenaCtx.fillStyle = 'rgba(255,255,255,0.8)';
+        arenaCtx.fillText(percent + '%', currentX + sliceWidth / 2, fieldHeight / 2 + 10);
+
+        currentX += sliceWidth;
+    });
+
+    // Рисуем шайбу
+    arenaCtx.beginPath();
+    arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
+    arenaCtx.fillStyle = '#ffffff';
+    arenaCtx.shadowColor = '#38bdf8';
+    arenaCtx.shadowBlur = 12;
+    arenaCtx.fill();
+    arenaCtx.shadowBlur = 0;
+    arenaCtx.lineWidth = 2;
+    arenaCtx.strokeStyle = '#0f172a';
+    arenaCtx.stroke();
+}
+
+function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
+    arenaState = 'SPINNING';
+    if (arenaTimerText) arenaTimerText.innerText = "Шайба запущена!";
+    if (arenaActionBtn) arenaActionBtn.style.display = 'none';
+
+    puck.x = 170; 
+    puck.y = 90;
+    
+    let targetX = targetStopX;
+    let targetY = 90;
+    
+    let dx = targetX - puck.x;
+    let dy = targetY - puck.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+    
+    let speed = 8;
+    puck.vx = (dx / distance) * speed;
+    puck.vy = (dy / distance) * speed;
+
+    function spinLoop() {
+        puck.x += puck.vx;
+        puck.y += puck.vy;
+
+        let currentDist = Math.sqrt((targetX - puck.x)**2 + (targetY - puck.y)**2);
+        if (currentDist < 10) {
+            puck.x = targetX;
+            puck.y = targetY;
+            cancelAnimationFrame(arenaAnimId);
+            showServerWinner(winnerName, netWin);
+            return;
+        }
+
+        drawArenaFrame();
+        arenaAnimId = requestAnimationFrame(spinLoop);
+    }
+
+    spinLoop();
+}
+
+function showServerWinner(winnerName, netWin) {
+    let numericNetWin = parseFloat(netWin);
+
+    if (winnerName === userName) {
+        score = parseFloat((score + numericNetWin).toFixed(2));
+        updateBalance();
+        if (arenaTimerText) arenaTimerText.innerText = `Вы выиграли +${numericNetWin.toFixed(2)} GRAM!`;
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } else {
+        if (arenaTimerText) arenaTimerText.innerText = `Победил ${winnerName}! Выигрыш: ${numericNetWin.toFixed(2)} GRAM`;
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+    }
+
+    if (arenaActionBtn) {
+        arenaActionBtn.style.display = 'block';
+        arenaActionBtn.innerText = "Играть еще";
+        arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
+        arenaActionBtn.onclick = resetArenaVisuals;
+    }
+}
+
 
 // ================= ESCAPE GAME LOGIC =================
 const escapeCanvas = document.getElementById('escapeCanvas');
@@ -430,7 +678,7 @@ function clickCell(index, cell) {
         if (minesWinAmountEl) minesWinAmountEl.innerText = currentWin + " GRAM";
         if (actionBtn) actionBtn.innerText = `Забрать (${currentWin} GRAM)`;
 
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('light');
         if (revealedSafeCount === (gridSize - mineCount)) { cashOut(); }
     }
 }
