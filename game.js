@@ -1,7 +1,5 @@
 let tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-if (tg) {
-    tg.expand();
-}
+if (tg) { tg.expand(); }
 
 let userName = "Игрок";
 let userHandle = "@username";
@@ -11,7 +9,7 @@ let botUsername = "GiftChase_bot";
 if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
     userName = tg.initDataUnsafe.user.first_name || "Игрок";
     userHandle = tg.initDataUnsafe.user.username ? "@" + tg.initDataUnsafe.user.username : "ID: " + tg.initDataUnsafe.user.id;
-    userId = tg.initDataUnsafe.user.id || "83408";
+    userId = String(tg.initDataUnsafe.user.id || "83408");
 }
 
 document.getElementById('username').innerText = userName;
@@ -26,7 +24,11 @@ let refLink = `https://t.me/${botUsername}?start=ref_${userId}`;
 const refInput = document.getElementById('refLinkInput');
 if (refInput) refInput.value = refLink;
 
-let score = 50.0; 
+let isDemoMode = localStorage.getItem(`gram_is_demo_${userId}`) === 'true';
+let realScore = parseFloat(localStorage.getItem(`gram_balance_${userId}`) || "0.0");
+let demoScore = parseFloat(localStorage.getItem(`gram_demo_balance_${userId}`) || "1000.0");
+let score = isDemoMode ? demoScore : realScore;
+
 let refCount = 0;
 let refEarned = 0.0;
 let cashbackAmount = 1.00;
@@ -34,22 +36,72 @@ let cashbackAmount = 1.00;
 const balanceEl = document.getElementById('balance');
 const profileBalanceEl = document.getElementById('profile-balance');
 
+// ФУНКЦИЯ ВСПЛЫВАЮЩИХ ТОСТ-УВЕДОМЛЕНИЙ (вместо alert)
+function showToast(text, isSuccess = false) {
+    let container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    let toast = document.createElement('div');
+    toast.className = `toast-msg ${isSuccess ? 'success' : ''}`;
+    toast.innerText = text;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => { toast.classList.add('show'); }, 10);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => { toast.remove(); }, 300);
+    }, 3000);
+}
+
 function updateBalance() {
-    if (balanceEl) balanceEl.innerText = score.toFixed(2);
+    score = parseFloat(score.toFixed(2));
+    
+    if (isDemoMode) {
+        demoScore = score;
+        localStorage.setItem(`gram_demo_balance_${userId}`, demoScore);
+    } else {
+        realScore = score;
+        localStorage.setItem(`gram_balance_${userId}`, realScore);
+    }
+
+    if (balanceEl) {
+        balanceEl.innerText = score.toFixed(2);
+        let currencyLabel = balanceEl.nextSibling;
+        if(currencyLabel) currencyLabel.nodeValue = isDemoMode ? " DEMO" : " GRAM";
+    }
+    
     if (profileBalanceEl) profileBalanceEl.innerText = score.toFixed(2);
     
     let cbBal = document.getElementById('cashbackBalance');
     let cbBtn = document.getElementById('cashbackBtnVal');
-    if (cbBal) cbBal.innerText = cashbackAmount.toFixed(2) + " GRAM";
+    if (cbBal) cbBal.innerText = cashbackAmount.toFixed(2) + (isDemoMode ? " DEMO" : " GRAM");
     if (cbBtn) cbBtn.innerText = cashbackAmount.toFixed(2);
-}
-updateBalance();
 
-function addTestGram() {
-    score += 10.0;
-    updateBalance();
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    updateDemoUIState();
 }
+
+function toggleDemoMode() {
+    isDemoMode = !isDemoMode;
+    localStorage.setItem(`gram_is_demo_${userId}`, isDemoMode);
+    score = isDemoMode ? demoScore : realScore;
+
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
+    updateBalance();
+    
+    showToast(isDemoMode ? "Включен ДЕМО-режим! Баланс тестовый." : "Включен РЕАЛЬНЫЙ режим (GRAM).", isDemoMode);
+}
+
+function updateDemoUIState() {
+    let demoBtn = document.getElementById('demoModeToggleBtn');
+    if (demoBtn) {
+        demoBtn.innerText = isDemoMode ? "Выключить Демо-режим" : "Включить Демо-режим (Тест)";
+        demoBtn.style.background = isDemoMode ? "linear-gradient(135deg, #ef4444, #dc2626)" : "linear-gradient(135deg, #3b82f6, #1d4ed8)";
+    }
+}
+
+updateBalance();
 
 function openScreen(screenName) {
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
@@ -64,15 +116,19 @@ function switchNav(screenName, btnElement) {
 }
 
 function openGame(gameName) {
-    if (gameName === 'mines') {
-        openScreen('mines');
-        initGrid();
+    if (gameName === 'iceArena') {
+        if (isDemoMode) {
+            showToast("PvP арена недоступна в Демо-режиме!", false);
+            return;
+        }
+        openScreen('iceArena');
+        initArenaOnOpen();
     } else if (gameName === 'escape') {
         openScreen('escape');
         resetEscapeVisuals();
-    } else if (gameName === 'iceArena') {
-        openScreen('iceArena');
-        resetArenaVisuals();
+    } else if (gameName === 'mines') {
+        openScreen('mines');
+        initGrid();
     }
 }
 
@@ -83,48 +139,44 @@ function shareRefLink() {
         tg.openTelegramLink(shareUrl);
     } else {
         navigator.clipboard.writeText(refLink);
-        alert("Реферальная ссылка скопирована в буфер обмена!");
+        showToast("Ссылка скопирована в буфер обмена!", true);
     }
 }
 
 function claimRefRewards() {
     if (refEarned <= 0) {
-        alert("У вас пока нет доступных наград от рефералов!");
+        showToast("У вас пока нет доступных наград от рефералов!", false);
         return;
     }
     score += refEarned;
     refEarned = 0.0;
     document.getElementById('refEarned').innerText = "0.00";
     updateBalance();
-    alert("Награды успешно зачислены!");
+    showToast("Награды успешно зачислены!", true);
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
 function claimCashback() {
     if (cashbackAmount <= 0) {
-        alert("У вас нет доступного кешбека!");
+        showToast("У вас нет доступного кешбека!", false);
         return;
     }
     score += cashbackAmount;
     cashbackAmount = 0.0;
     updateBalance();
-    alert("Кешбек успешно получен!");
+    showToast("Кешбек успешно получен!", true);
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
 let soundEnabled = true;
-function toggleSound(checkbox) {
-    soundEnabled = checkbox.checked;
-}
+function toggleSound(checkbox) { soundEnabled = checkbox.checked; }
 
-// ================= ICE ARENA (OPTIMIZED MULTIPLAYER WITH CONNECTION CHECK) =================
-let arenaState = 'IDLE'; // IDLE, WAITING, SPINNING, FINISHED
+// ================= ICE ARENA (PvP) =================
+let arenaState = 'IDLE'; 
 let arenaPlayers = []; 
 let arenaTotalBank = 0;
 let arenaTimer = 15;
 let arenaTimerInterval = null;
-let winningPlayerId = null;
-let isWsConnected = false; 
 
 const arenaCanvas = document.getElementById('arenaCanvas');
 const arenaCtx = arenaCanvas ? arenaCanvas.getContext('2d') : null;
@@ -132,115 +184,174 @@ const arenaBetInput = document.getElementById('arenaBetInput');
 const arenaActionBtn = document.getElementById('arenaActionBtn');
 const arenaTimerText = document.getElementById('arenaTimerText');
 const arenaTotalBankEl = document.getElementById('arenaTotalBank');
+const arenaPlayersListEl = document.getElementById('arenaPlayersList');
+const arenaWinModal = document.getElementById('arenaWinModal');
 
-let puck = { x: -50, y: -50, vx: 0, vy: 0, radius: 10, speed: 0 };
+let puck = { x: 170, y: 90, vx: 0, vy: 0, radius: 12, speed: 0 };
 let arenaAnimId = null;
-let spinStartTimeMs = 0;
+let arrowRotationAngle = Math.PI; 
+let arenaWinnerPlayer = null;
 
-// Подключение к серверу Render
-const ws = new WebSocket('wss://game-backend-ht4v.onrender.com');
+const ARENA_STORAGE_KEY = `gram_arena_session_${userId}`;
 
-ws.onopen = () => {
-    isWsConnected = true;
-    console.log("WebSocket успешно подключен!");
-    if (arenaTimerText && arenaState === 'IDLE') {
-        arenaTimerText.innerText = "Сервер на связи. Сделайте ставку!";
+function saveArenaSession() {
+    const sessionData = {
+        arenaState, arenaPlayers, arenaTotalBank, arenaTimer,
+        targetTimestamp: Date.now() + (arenaTimer * 1000)
+    };
+    localStorage.setItem(ARENA_STORAGE_KEY, JSON.stringify(sessionData));
+}
+
+function clearArenaSession() { localStorage.removeItem(ARENA_STORAGE_KEY); }
+
+function updateArenaActionButton() {
+    if (!arenaActionBtn || arenaState === 'SPINNING') return;
+    let betVal = parseFloat(arenaBetInput.value || 0.25).toFixed(2);
+    if (arenaState === 'IDLE' || arenaState === 'WAITING') {
+        arenaActionBtn.innerText = `Поставить ${betVal} GRAM`;
+        arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
     }
-};
-
-ws.onclose = () => {
-    isWsConnected = false;
-    console.log("WebSocket отключен.");
-    if (arenaTimerText) arenaTimerText.innerText = "Нет связи с сервером (переподключение)...";
-};
-
-ws.onerror = (error) => {
-    isWsConnected = false;
-    console.error("Ошибка WebSocket:", error);
-};
-
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-
-    if (data.type === 'INIT' || data.type === 'ROOM_UPDATE') {
-        arenaPlayers = data.room ? data.room.players : data.players;
-        arenaTotalBank = data.totalBank || 0;
-        updateArenaSectors();
-        drawArenaFrame();
-        renderArenaParticipantsList();
-    }
-    
-    if (data.type === 'TIMER_UPDATE') {
-        arenaTimer = data.timer;
-        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с (ожидание игроков)`;
-    }
-
-    if (data.type === 'SPIN_START') {
-        winningPlayerId = data.winnerId;
-        triggerServerSpinAnimation(data.stopX, data.winnerName, data.netWin);
-    }
-
-    if (data.type === 'RESET_ROOM') {
-        resetArenaVisuals();
-    }
-};
+}
 
 function setArenaBet(val) {
-    if (arenaState === 'SPINNING') return;
+    if (arenaState === 'SPINNING' || arenaState === 'WAITING') return;
     if (arenaBetInput) arenaBetInput.value = val.toFixed(2);
+    updateArenaActionButton();
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
+if (arenaBetInput) {
+    arenaBetInput.addEventListener('input', () => { updateArenaActionButton(); });
+}
+
+function initArenaOnOpen() {
+    const saved = localStorage.getItem(ARENA_STORAGE_KEY);
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            arenaState = data.arenaState;
+            arenaPlayers = data.arenaPlayers;
+            arenaTotalBank = data.arenaTotalBank;
+            
+            if (arenaState === 'WAITING') {
+                const timeLeft = Math.floor((data.targetTimestamp - Date.now()) / 1000);
+                if (timeLeft > 0) {
+                    arenaTimer = timeLeft;
+                    if (arenaActionBtn) {
+                        arenaActionBtn.style.display = 'block';
+                        arenaActionBtn.innerText = "Вы в игре! Ожидание...";
+                        arenaActionBtn.style.background = "#64748b";
+                    }
+                    updateArenaSectors();
+                    renderArenaPlayersList();
+                    drawArenaFrame();
+                    startArenaTimer(true);
+                    return;
+                } else {
+                    triggerArenaSpin();
+                    return;
+                }
+            } else if (arenaState === 'SPINNING') {
+                triggerArenaSpin();
+                return;
+            }
+        } catch (e) { console.error(e); }
+    }
+    resetArenaVisuals();
+}
+
 function resetArenaVisuals() {
+    clearArenaSession();
     arenaState = 'IDLE';
-    arenaPlayers = [];
+    arenaWinnerPlayer = null;
+    arenaPlayers = [{ name: userName, handle: userHandle, bet: 0.25, color: '#3b82f6', isUser: true, initials: initials }];
     arenaTotalBank = 0;
-    winningPlayerId = null;
-    puck.x = -50; puck.y = -50; 
+    if (arenaWinModal) arenaWinModal.style.display = 'none';
     if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+    
+    if (arenaBetInput) arenaBetInput.value = "0.25";
+
     if (arenaActionBtn) {
         arenaActionBtn.style.display = 'block';
-        arenaActionBtn.innerText = "Сделать ставку и войти";
-        arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
+        updateArenaActionButton();
         arenaActionBtn.onclick = joinArenaGame;
     }
-    if (arenaTimerText) {
-        arenaTimerText.innerText = isWsConnected ? "Готово к игре. Сделайте ставку!" : "Просыпается сервер, подождите 10 сек...";
-    }
+    if (arenaTimerText) arenaTimerText.innerText = "Ожидание игроков...";
     updateArenaSectors();
+    renderArenaPlayersList();
     drawArenaFrame();
-    renderArenaParticipantsList();
+}
+
+function closeArenaWinModal() {
+    if (arenaWinModal) arenaWinModal.style.display = 'none';
+    resetArenaVisuals();
 }
 
 function joinArenaGame() {
-    if (arenaState === 'SPINNING') return;
-
-    if (!isWsConnected || ws.readyState !== WebSocket.OPEN) {
-        alert('Сервер еще «просыпается» после долгого сна ( Render.com ). Пожалуйста, подождите еще 10–20 секунд и попробуйте снова!');
+    if (isDemoMode) {
+        showToast("PvP арена недоступна в демо-режиме!", false);
         return;
     }
-
+    if (arenaState === 'SPINNING' || arenaState === 'WAITING') return;
     let betVal = parseFloat(parseFloat(arenaBetInput.value || 0.25).toFixed(2));
     
-    if (betVal < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); return; }
-    if (score < betVal) { alert('Недостаточно GRAM на балансе!'); return; }
+    if (betVal < 0.25) { showToast('Минимальная ставка 0.25 GRAM!', false); return; }
+    if (score < betVal) { showToast('Недостаточно GRAM на балансе!', false); return; }
 
     score = parseFloat((score - betVal).toFixed(2));
     updateBalance();
 
-    ws.send(JSON.stringify({
-        type: 'JOIN_ARENA',
-        userId: userId,
-        name: userName,
-        bet: betVal,
-        color: '#3b82f6'
-    }));
-
+    arenaPlayers = [{ name: userName, handle: userHandle, bet: betVal, color: '#3b82f6', isUser: true, initials: initials }];
+    arenaTotalBank = betVal;
+    
+    updateArenaSectors();
+    renderArenaPlayersList();
+    
     if (arenaActionBtn) {
-        arenaActionBtn.innerText = "Вы в игре! Ожидание соперника...";
+        arenaActionBtn.innerText = "Вы в игре! Ожидание...";
         arenaActionBtn.style.background = "#64748b";
     }
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    drawArenaFrame();
+
+    setTimeout(() => {
+        if (arenaState === 'WAITING') {
+            let botMultipliers = [1.2, 1.5, 2.0, 2.5];
+            let randomMult = botMultipliers[Math.floor(Math.random() * botMultipliers.length)];
+            let botBet = parseFloat((betVal * randomMult).toFixed(2));
+
+            arenaPlayers.push({ name: "CryptoKing", handle: "@cryptoking", bet: botBet, color: '#ef4444', isUser: false, initials: "CK" });
+
+            updateArenaSectors();
+            renderArenaPlayersList();
+            drawArenaFrame();
+            saveArenaSession();
+        }
+    }, 1500);
+
+    startArenaTimer(false);
+}
+
+function startArenaTimer(isResumed) {
+    if (!isResumed) {
+        arenaState = 'WAITING';
+        arenaTimer = 15;
+    }
+    
+    if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с`;
+    saveArenaSession();
+
+    if (arenaTimerInterval) clearInterval(arenaTimerInterval);
+    arenaTimerInterval = setInterval(() => {
+        arenaTimer--;
+        if (arenaTimer > 0) {
+            if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с`;
+            saveArenaSession();
+        } else {
+            clearInterval(arenaTimerInterval);
+            triggerArenaSpin();
+        }
+    }, 1000);
 }
 
 function updateArenaSectors() {
@@ -251,7 +362,7 @@ function updateArenaSectors() {
     let currentX = 0;
     let fieldWidth = 340;
     arenaPlayers.forEach(p => {
-        let widthRatio = total > 0 ? (p.bet / total) : 0;
+        let widthRatio = p.bet / total;
         let sliceWidth = fieldWidth * widthRatio;
         p.xStart = currentX;
         p.xEnd = currentX + sliceWidth;
@@ -259,26 +370,46 @@ function updateArenaSectors() {
     });
 }
 
-function drawArenaFrame() {
-    if (!arenaCtx || !arenaCanvas) return;
-    
-    let fieldWidth = arenaCanvas.width || 340;
-    let fieldHeight = arenaCanvas.height || 180;
-
-    arenaCtx.clearRect(0, 0, fieldWidth, fieldHeight);
+function renderArenaPlayersList() {
+    if (!arenaPlayersListEl) return;
+    arenaPlayersListEl.innerHTML = '';
 
     let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
-    if (total <= 0) {
-        arenaCtx.fillStyle = '#1e293b';
-        arenaCtx.fillRect(0, 0, fieldWidth, fieldHeight);
-        arenaCtx.fillStyle = '#64748b';
-        arenaCtx.font = '14px sans-serif';
-        arenaCtx.textAlign = 'center';
-        arenaCtx.textBaseline = 'middle';
-        arenaCtx.fillText("Сделайте ставку для начала игры...", fieldWidth / 2, fieldHeight / 2);
-        return;
-    }
+    if (total <= 0) total = 1;
 
+    arenaPlayers.forEach(p => {
+        let percent = ((p.bet / total) * 100).toFixed(1);
+        let initialsP = p.initials || (p.name ? p.name.substring(0, 2).toUpperCase() : "US");
+        let handleStr = p.handle || (p.isUser ? userHandle : "@" + p.name.toLowerCase());
+
+        let card = document.createElement('div');
+        card.classList.add('arena-player-card');
+        card.innerHTML = `
+            <div class="arena-player-left">
+                <div class="arena-player-avatar" style="background: ${p.color};">${initialsP}</div>
+                <div class="arena-player-info">
+                    <h4>${handleStr}</h4>
+                    <p>${p.name}</p>
+                </div>
+            </div>
+            <div class="arena-player-right">
+                <p class="arena-player-chance">${percent}%</p>
+                <p class="arena-player-bet">${p.bet.toFixed(2)} GRAM</p>
+            </div>
+        `;
+        arenaPlayersListEl.appendChild(card);
+    });
+}
+
+function drawArenaFrame(isIndicatorPhase = false) {
+    if (!arenaCtx) return;
+    arenaCtx.clearRect(0, 0, 340, 180);
+
+    let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
+    if (total <= 0) total = 1;
+
+    let fieldWidth = 340;
+    let fieldHeight = 180;
     let currentX = 0;
 
     arenaPlayers.forEach(p => {
@@ -287,16 +418,16 @@ function drawArenaFrame() {
         p.xStart = currentX;
         p.xEnd = currentX + sliceWidth;
 
-        let isWinner = (winningPlayerId && p.id === winningPlayerId);
-        let isLoser = (winningPlayerId && p.id !== winningPlayerId);
-
         arenaCtx.save();
-        if (isLoser) arenaCtx.globalAlpha = 0.3; 
-
-        arenaCtx.fillStyle = p.color || '#3b82f6';
+        arenaCtx.fillStyle = p.color;
         arenaCtx.fillRect(currentX, 0, sliceWidth, fieldHeight);
 
-        if (isWinner) {
+        if (arenaState === 'FINISHED' && arenaWinnerPlayer && p !== arenaWinnerPlayer) {
+            arenaCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            arenaCtx.fillRect(currentX, 0, sliceWidth, fieldHeight);
+        }
+
+        if (arenaState === 'FINISHED' && arenaWinnerPlayer && p === arenaWinnerPlayer) {
             arenaCtx.strokeStyle = '#ffffff';
             arenaCtx.lineWidth = 4;
             arenaCtx.shadowColor = '#ffffff';
@@ -309,171 +440,162 @@ function drawArenaFrame() {
             arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
         }
 
-        let percent = (p.bet / total) * 100;
-        if (percent > 10) {
-            let avatarX = currentX + sliceWidth / 2;
-            let avatarY = fieldHeight / 2;
-            
-            arenaCtx.beginPath();
-            arenaCtx.arc(avatarX, avatarY, 16, 0, Math.PI * 2);
-            arenaCtx.fillStyle = '#0f172a';
-            arenaCtx.fill();
-            arenaCtx.lineWidth = 2;
-            arenaCtx.strokeStyle = isWinner ? '#ffffff' : 'rgba(255,255,255,0.7)';
-            arenaCtx.stroke();
+        let centerX = currentX + sliceWidth / 2;
+        let centerY = fieldHeight / 2;
+        let avatarRadius = 18;
 
-            arenaCtx.fillStyle = '#fff';
-            arenaCtx.font = 'bold 11px sans-serif';
-            arenaCtx.textAlign = 'center';
-            arenaCtx.textBaseline = 'middle';
-            let initials = p.name ? p.name.substring(0, 2).toUpperCase() : "AI";
-            arenaCtx.fillText(initials, avatarX, avatarY);
-        }
+        arenaCtx.beginPath();
+        arenaCtx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
+        arenaCtx.fillStyle = p.color;
+        arenaCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        arenaCtx.shadowBlur = 6;
+        arenaCtx.fill();
+        arenaCtx.shadowBlur = 0;
+        arenaCtx.lineWidth = 2;
+        arenaCtx.strokeStyle = '#ffffff';
+        arenaCtx.stroke();
 
+        arenaCtx.fillStyle = '#ffffff';
+        arenaCtx.font = 'bold 11px sans-serif';
+        arenaCtx.textAlign = 'center';
+        arenaCtx.textBaseline = 'middle';
+        let initialsP = p.initials || (p.name ? p.name.substring(0, 2).toUpperCase() : "US");
+        arenaCtx.fillText(initialsP, centerX, centerY);
+        
         arenaCtx.restore();
         currentX += sliceWidth;
     });
 
-    if (arenaState === 'SPINNING' || arenaState === 'FINISHED') {
+    arenaCtx.beginPath();
+    arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
+    arenaCtx.fillStyle = '#ffffff';
+    arenaCtx.shadowColor = '#38bdf8';
+    arenaCtx.shadowBlur = 12;
+    arenaCtx.fill();
+    arenaCtx.shadowBlur = 0;
+    arenaCtx.lineWidth = 2;
+    arenaCtx.strokeStyle = '#0f172a';
+    arenaCtx.stroke();
+
+    if (isIndicatorPhase) {
+        arrowRotationAngle += 0.25; 
+        arenaCtx.save();
+        arenaCtx.translate(puck.x, puck.y);
+        arenaCtx.rotate(arrowRotationAngle);
+
         arenaCtx.beginPath();
-        arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
-        arenaCtx.fillStyle = '#ffffff';
-        arenaCtx.shadowColor = '#38bdf8';
-        arenaCtx.shadowBlur = 12;
+        arenaCtx.moveTo(puck.radius + 2, 0);
+        arenaCtx.lineTo(puck.radius + 9, -4);
+        arenaCtx.lineTo(puck.radius + 9, 4);
+        arenaCtx.fillStyle = '#ffffff'; 
         arenaCtx.fill();
-        arenaCtx.shadowBlur = 0;
-        arenaCtx.lineWidth = 2;
+        arenaCtx.lineWidth = 1;
         arenaCtx.strokeStyle = '#0f172a';
         arenaCtx.stroke();
 
-        if (arenaState === 'SPINNING' && (Date.now() - spinStartTimeMs < 3000)) {
-            let angle = Math.atan2(puck.vy, puck.vx);
-            arenaCtx.save();
-            arenaCtx.translate(puck.x, puck.y);
-            arenaCtx.rotate(angle);
-            arenaCtx.beginPath();
-            arenaCtx.moveTo(15, 0);
-            arenaCtx.lineTo(25, -6);
-            arenaCtx.lineTo(25, 6);
-            arenaCtx.fillStyle = '#facc15'; 
-            arenaCtx.fill();
-            arenaCtx.restore();
-        }
+        arenaCtx.restore();
     }
 }
 
-function renderArenaParticipantsList() {
-    let container = document.getElementById('arenaParticipantsList');
-    if (!container) {
-        const canvasParent = arenaCanvas ? arenaCanvas.parentNode : null;
-        if (canvasParent) {
-            container = document.createElement('div');
-            container.id = 'arenaParticipantsList';
-            container.style.cssText = "margin-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%; max-height: 120px; overflow-y: auto;";
-            canvasParent.appendChild(container);
-        } else {
-            return;
-        }
-    }
-
-    container.innerHTML = '';
-    let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
-
-    arenaPlayers.forEach(p => {
-        let percent = total > 0 ? Math.round((p.bet / total) * 100) : 0;
-        let isWinner = (winningPlayerId && p.id === winningPlayerId);
-        let isLoser = (winningPlayerId && p.id !== winningPlayerId);
-
-        let item = document.createElement('div');
-        item.style.cssText = `
-            display: flex; justify-content: space-between; align-items: center;
-            background: #1e293b; padding: 6px 10px; border-radius: 8px;
-            font-size: 13px; border-left: 4px solid ${p.color};
-            opacity: ${isLoser ? '0.3' : '1'};
-            box-shadow: ${isWinner ? '0 0 10px #ffffff' : 'none'};
-        `;
-
-        item.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-weight: bold; color: #fff;">${p.name}</span>
-            </div>
-            <div style="display: flex; gap: 12px; color: #94a3b8;">
-                <span>Ставка: <strong style="color: #10b981;">${p.bet.toFixed(2)} GRAM</strong></span>
-                <span>Шанс: <strong style="color: #38bdf8;">${percent}%</strong></span>
-            </div>
-        `;
-        container.appendChild(item);
-    });
-}
-
-function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
+function triggerArenaSpin() {
     arenaState = 'SPINNING';
-    spinStartTimeMs = Date.now();
-    if (arenaTimerText) arenaTimerText.innerText = "Шайба запущена!";
+    saveArenaSession();
+    if (arenaTimerText) arenaTimerText.innerText = "Выбор направления...";
     if (arenaActionBtn) arenaActionBtn.style.display = 'none';
 
-    puck.x = Math.random() * 280 + 30; 
-    puck.y = Math.random() * 120 + 30;
-    
-    let targetX = targetStopX;
-    let targetY = 90;
-    
-    let dx = targetX - puck.x;
-    let dy = targetY - puck.y;
-    let distance = Math.sqrt(dx * dx + dy * dy);
-    
-    let speed = 9;
-    puck.vx = (dx / distance) * speed;
-    puck.vy = (dy / distance) * speed;
+    puck.x = 170; puck.y = 90;
+    let spinStartTime = Date.now();
+    let hasLaunched = false;
 
     function spinLoop() {
+        let elapsed = Date.now() - spinStartTime;
+
+        if (elapsed < 2500) {
+            drawArenaFrame(true); 
+            arenaAnimId = requestAnimationFrame(spinLoop);
+            return;
+        }
+
+        if (!hasLaunched) {
+            hasLaunched = true;
+            if (arenaTimerText) arenaTimerText.innerText = "Шайба полетела!";
+            let randomAngle = (Math.random() * 1.2 + 0.3) * (Math.random() < 0.5 ? 1 : -1);
+            puck.speed = 7;
+            puck.vx = Math.cos(randomAngle) * puck.speed * (Math.random() < 0.5 ? 1 : -1);
+            puck.vy = Math.sin(randomAngle) * puck.speed * (Math.random() < 0.5 ? 1 : -1);
+        }
+
+        let flightElapsed = elapsed - 2500;
+        let isDecelerating = flightElapsed > 4000; 
+
+        if (isDecelerating) {
+            puck.speed *= 0.975;
+            puck.vx *= 0.975;
+            puck.vy *= 0.975;
+        }
+
         puck.x += puck.vx;
         puck.y += puck.vy;
 
-        let currentDist = Math.sqrt((targetX - puck.x)**2 + (targetY - puck.y)**2);
-        if (currentDist < 10) {
-            puck.x = targetX;
-            puck.y = targetY;
+        let hitWall = false;
+        if (puck.x - puck.radius <= 0) { puck.x = puck.radius; puck.vx = -puck.vx; hitWall = true; }
+        else if (puck.x + puck.radius >= 340) { puck.x = 340 - puck.radius; puck.vx = -puck.vx; hitWall = true; }
+
+        if (puck.y - puck.radius <= 0) { puck.y = puck.radius; puck.vy = -puck.vy; hitWall = true; }
+        else if (puck.y + puck.radius >= 180) { puck.y = 180 - puck.radius; puck.vy = -puck.vy; hitWall = true; }
+
+        if (hitWall && tg && tg.HapticFeedback) { tg.HapticFeedback.impactOccurred('light'); }
+
+        drawArenaFrame(false); 
+
+        if (isDecelerating && Math.abs(puck.vx) < 0.08 && Math.abs(puck.vy) < 0.08) {
             cancelAnimationFrame(arenaAnimId);
-            arenaState = 'FINISHED';
-            drawArenaFrame();
-            showServerWinner(winnerName, netWin);
-            return;
+            determineArenaWinner();
+        } else {
+            arenaAnimId = requestAnimationFrame(spinLoop);
         }
-
-        drawArenaFrame();
-        arenaAnimId = requestAnimationFrame(spinLoop);
     }
-
     spinLoop();
 }
 
-function showServerWinner(winnerName, netWin) {
-    let numericNetWin = parseFloat(netWin);
-    let userWon = arenaPlayers.some(p => p.id === userId && p.id === winningPlayerId) || (winnerName === userName);
+function determineArenaWinner() {
+    arenaState = 'FINISHED';
+    clearArenaSession();
+    
+    let winner = arenaPlayers.find(p => puck.x >= p.xStart && puck.x <= p.xEnd);
+    if (!winner) winner = arenaPlayers[0];
+    arenaWinnerPlayer = winner;
 
-    if (userWon) {
-        score = parseFloat((score + numericNetWin).toFixed(2));
+    let totalPool = arenaTotalBank;
+    let commission = totalPool * 0.25; 
+    let netWin = totalPool - commission;
+
+    let totalSum = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
+    let winnerPercent = ((winner.bet / totalSum) * 100).toFixed(1);
+    let winnerHandleStr = winner.handle || (winner.isUser ? userHandle : "@" + winner.name.toLowerCase());
+
+    if (winner.isUser) {
+        score = parseFloat((score + netWin).toFixed(2));
         updateBalance();
-        if (arenaTimerText) arenaTimerText.innerText = `Вы выиграли +${numericNetWin.toFixed(2)} GRAM!`;
+        if (arenaTimerText) arenaTimerText.innerText = `Вы выиграли +${netWin.toFixed(2)} GRAM!`;
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } else {
-        if (arenaTimerText) arenaTimerText.innerText = `Победил ${winnerName}! Выигрыш: ${numericNetWin.toFixed(2)} GRAM`;
+        if (arenaTimerText) arenaTimerText.innerText = `Победил ${winner.name}! Банк: ${netWin.toFixed(2)} GRAM`;
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
     }
 
-    renderArenaParticipantsList();
+    drawArenaFrame(false);
 
-    if (arenaActionBtn) {
-        arenaActionBtn.style.display = 'block';
-        arenaActionBtn.innerText = "Играть еще";
-        arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
-        arenaActionBtn.onclick = resetArenaVisuals;
-    }
+    setTimeout(() => {
+        let badgeEl = document.getElementById('winModalBadgeText');
+        let amountEl = document.getElementById('winModalAmountText');
+        if (badgeEl) badgeEl.innerText = `${winnerHandleStr} • ${winnerPercent}%`;
+        if (amountEl) amountEl.innerText = `+${netWin.toFixed(2)} GRAM`;
+        if (arenaWinModal) arenaWinModal.style.display = 'flex';
+    }, 800);
 }
 
-
-// ================= ESCAPE GAME LOGIC =================
+// ================= ESCAPE GAME =================
 const escapeCanvas = document.getElementById('escapeCanvas');
 const escapeCtx = escapeCanvas ? escapeCanvas.getContext('2d') : null;
 const escapeBetInput = document.getElementById('escapeBetInput');
@@ -504,7 +626,7 @@ function multiplyEscapeBet(factor) {
 
 function maxEscapeBet() {
     if (escapeState !== 'IDLE' || !escapeBetInput) return;
-    if (score < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); return; }
+    if (score < 0.25) { showToast('Минимальная ставка 0.25!', false); return; }
     escapeBetInput.value = parseFloat(score.toFixed(2));
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
@@ -522,8 +644,8 @@ function startEscapeGame() {
     if (escapeState !== 'IDLE' || !escapeBetInput) return;
     currentBetAmount = parseFloat(parseFloat(escapeBetInput.value || 0.25).toFixed(2));
 
-    if (currentBetAmount < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); escapeBetInput.value = 0.25; return; }
-    if (score < currentBetAmount) { alert('Недостаточно GRAM на балансе!'); return; }
+    if (currentBetAmount < 0.25) { showToast('Минимальная ставка 0.25!', false); escapeBetInput.value = 0.25; return; }
+    if (score < currentBetAmount) { showToast('Недостаточно средств на балансе!', false); return; }
 
     score = parseFloat((score - currentBetAmount).toFixed(2));
     updateBalance();
@@ -543,8 +665,8 @@ function startEscapeGame() {
     ball.x = 150; ball.y = 150;
     gameStartTime = Date.now();
     let angle = Math.random() * Math.PI * 2;
-    ball.vx = Math.cos(angle) * 5.0;
-    ball.vy = Math.sin(angle) * 5.0;
+    ball.vx = Math.cos(angle) * 5.5;
+    ball.vy = Math.sin(angle) * 5.5;
 
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
     cancelAnimationFrame(escapeAnimId);
@@ -554,7 +676,7 @@ function startEscapeGame() {
 function runEscapeLoop() {
     if (escapeState === 'IDLE') return;
     if (escapeState === 'PLAYING') {
-        ringRotation += 0.025; 
+        ringRotation += 0.035; 
         ball.x += ball.vx; ball.y += ball.vy;
 
         let dx = ball.x - 150, dy = ball.y - 150;
@@ -566,7 +688,7 @@ function runEscapeLoop() {
             let relativeAngle = (hitAngle - ringRotation) % (Math.PI * 2);
             if (relativeAngle < 0) relativeAngle += Math.PI * 2;
 
-            let isInGap = (relativeAngle > (Math.PI * 2 - 0.3) || relativeAngle < 0.3);
+            let isInGap = (relativeAngle > (Math.PI * 2 - 0.2) || relativeAngle < 0.2);
             let canExit = (Date.now() - gameStartTime > 600);
 
             if (isInGap && canExit) {
@@ -585,10 +707,10 @@ function runEscapeLoop() {
                 ball.vx = Math.cos(currentAngle) * speed; ball.vy = Math.sin(currentAngle) * speed;
                 ball.x = 150 + nx * maxDist; ball.y = 150 + ny * maxDist;
 
-                escapeMultiplier = parseFloat((escapeMultiplier + 0.15).toFixed(2));
+                escapeMultiplier = parseFloat((escapeMultiplier + 0.10).toFixed(2));
                 if (Math.floor(escapeMultiplier) > lastIntegerMultiplier) {
                     lastIntegerMultiplier = Math.floor(escapeMultiplier);
-                    ball.vx *= 1.15; ball.vy *= 1.15;
+                    ball.vx *= 1.2; ball.vy *= 1.2;
                     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
                 }
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
@@ -623,8 +745,8 @@ function drawEscapeFrame() {
     escapeCtx.clearRect(0, 0, 300, 300);
     escapeCtx.save(); escapeCtx.translate(150, 150); escapeCtx.rotate(ringRotation);
     escapeCtx.beginPath();
-    let arcEnd = (escapeState === 'PLAYING' || escapeState === 'ESCAPING') ? (Math.PI * 2 - 0.3) : (Math.PI * 2);
-    escapeCtx.arc(0, 0, ringRadius, 0.3, arcEnd, false);
+    let arcEnd = (escapeState === 'PLAYING' || escapeState === 'ESCAPING') ? (Math.PI * 2 - 0.2) : (Math.PI * 2);
+    escapeCtx.arc(0, 0, ringRadius, 0.2, arcEnd, false);
     escapeCtx.strokeStyle = '#38bdf8'; escapeCtx.lineWidth = 4; escapeCtx.stroke();
     escapeCtx.restore();
 
@@ -656,17 +778,18 @@ function drawEscapeFrame() {
 
 function finishEscapeGame(isWin) {
     cancelAnimationFrame(escapeAnimId);
+    let currencyName = isDemoMode ? "DEMO" : "GRAM";
     if (isWin) {
         if (escapeMultiplier < 0.15) escapeMultiplier = 0.30;
         let winAmount = parseFloat((currentBetAmount * escapeMultiplier).toFixed(2));
         escapeState = 'FLYING_REWARD'; floatingAnim.active = true;
-        floatingAnim.text = `+${winAmount} GRAM`; floatingAnim.color = '#10b981';
+        floatingAnim.text = `+${winAmount} ${currencyName}`; floatingAnim.color = '#10b981';
         floatingAnim.startX = 75; floatingAnim.startY = 240; floatingAnim.x = floatingAnim.startX; floatingAnim.y = floatingAnim.startY;
         floatingAnim.targetX = 240; floatingAnim.targetY = -120; floatingAnim.progress = 0; floatingAnim.duration = 50; floatingAnim.alpha = 1.0; floatingAnim.pendingReward = winAmount;
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } else {
         escapeState = 'IDLE'; floatingAnim.active = true;
-        floatingAnim.text = `+0 GRAM`; floatingAnim.color = '#ef4444';
+        floatingAnim.text = `+0 ${currencyName}`; floatingAnim.color = '#ef4444';
         floatingAnim.startX = 225; floatingAnim.startY = 240; floatingAnim.x = floatingAnim.startX; floatingAnim.y = floatingAnim.startY;
         floatingAnim.alpha = 1.0; floatingAnim.pendingReward = 0;
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
@@ -680,7 +803,7 @@ function finishEscapeGame(isWin) {
     runEscapeLoop();
 }
 
-// ================= MINES GAME LOGIC =================
+// ================= MINES GAME =================
 let gridSize = 25, board = [], minesGameStarted = false, minesGameOver = false;
 let currentBet = 0.25, mineCount = 3, revealedSafeCount = 0, currentMultiplier = 1.0;
 
@@ -716,17 +839,19 @@ function initGrid() {
         cell.addEventListener('click', () => clickCell(i, cell));
         gridEl.appendChild(cell);
     }
-    if (minesMultiplierEl) minesMultiplierEl.innerText = "1.00x";
-    if (minesWinAmountEl) minesWinAmountEl.innerText = "0.00 GRAM";
+    let currencyName = isDemoMode ? "DEMO" : "GRAM";
+    if (minesMultiplierEl) minesMultiplierEl.innerText = "0.80x";
+    if (minesWinAmountEl) minesWinAmountEl.innerText = (currentBet * 0.8).toFixed(2) + " " + currencyName;
 }
 
 function calculateMinesMultiplier(totalTiles, mines, revealed) {
-    if (revealed === 0) return 1.0;
+    if (revealed === 0) return 0.80;
     let probability = 1.0;
     for (let i = 0; i < revealed; i++) {
         probability *= ((totalTiles - mines - i) / (totalTiles - i));
     }
-    return Math.max(1.01, parseFloat(((1.0 / probability) * 0.99).toFixed(2)));
+    let mult = (1.0 / probability) * 0.90;
+    return Math.max(0.80, parseFloat(mult.toFixed(2)));
 }
 
 function startGame() {
@@ -734,20 +859,23 @@ function startGame() {
     currentBet = parseFloat(parseFloat(betInput.value || 0.25).toFixed(2));
     mineCount = parseInt(minesInput.value) || 3;
 
-    if (currentBet < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); betInput.value = 0.25; return; }
+    let currencyName = isDemoMode ? "DEMO" : "GRAM";
+
+    if (currentBet < 0.25) { showToast('Минимальная ставка 0.25!', false); betInput.value = 0.25; return; }
     if (mineCount < 1) mineCount = 1; if (mineCount > 24) mineCount = 24; minesInput.value = mineCount;
-    if (score < currentBet) { alert('Недостаточно GRAM!'); return; }
+    if (score < currentBet) { showToast('Недостаточно средств!', false); return; }
 
     score = parseFloat((score - currentBet).toFixed(2));
     updateBalance();
     cashbackAmount += currentBet * 0.15;
 
-    minesGameStarted = true; minesGameOver = false; revealedSafeCount = 0; currentMultiplier = 1.0;
-    if (minesMultiplierEl) minesMultiplierEl.innerText = "1.00x"; 
-    if (minesWinAmountEl) minesWinAmountEl.innerText = currentBet.toFixed(2) + " GRAM";
+    minesGameStarted = true; minesGameOver = false; revealedSafeCount = 0; currentMultiplier = 0.80;
+    let startWin = (currentBet * 0.80).toFixed(2);
+    if (minesMultiplierEl) minesMultiplierEl.innerText = "0.80x"; 
+    if (minesWinAmountEl) minesWinAmountEl.innerText = startWin + " " + currencyName;
 
     if (actionBtn) {
-        actionBtn.innerText = "Забрать выигрыш";
+        actionBtn.innerText = `Забрать (${startWin} ${currencyName})`;
         actionBtn.style.background = "linear-gradient(135deg, #eab308, #ca8a04)";
         actionBtn.onclick = cashOut;
     }
@@ -766,6 +894,8 @@ function startGame() {
 function clickCell(index, cell) {
     if (!minesGameStarted || minesGameOver || cell.classList.contains('revealed')) return;
     cell.classList.add('revealed');
+
+    let currencyName = isDemoMode ? "DEMO" : "GRAM";
 
     if (board[index] === 'mine') {
         cell.classList.add('mine'); cell.innerText = 'X';
@@ -786,8 +916,8 @@ function clickCell(index, cell) {
         let currentWin = (currentBet * currentMultiplier).toFixed(2);
         
         if (minesMultiplierEl) minesMultiplierEl.innerText = currentMultiplier.toFixed(2) + "x";
-        if (minesWinAmountEl) minesWinAmountEl.innerText = currentWin + " GRAM";
-        if (actionBtn) actionBtn.innerText = `Забрать (${currentWin} GRAM)`;
+        if (minesWinAmountEl) minesWinAmountEl.innerText = currentWin + " " + currencyName;
+        if (actionBtn) actionBtn.innerText = `Забрать (${currentWin} ${currencyName})`;
 
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('light');
         if (revealedSafeCount === (gridSize - mineCount)) { cashOut(); }
@@ -822,16 +952,17 @@ function revealAllMines() {
     });
 }
 
-
-// ================= TON CONNECT ПОПОЛНЕНИЕ (1 TON = 1 GRAM) =================
-
-// Инициализация TON Connect UI (ищет #ton-connect-button внутри модального окна)
+// ================= TON CONNECT =================
 const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl: 'https://ka3a3-sketch.github.io/arcade-hub/tonconnect-manifest.json',
     buttonRootId: 'ton-connect-button'
 });
 
 function openDepositModal() {
+    if (isDemoMode) {
+        showToast("Пополнение недоступно в демо-режиме.", false);
+        return;
+    }
     let modal = document.getElementById('depositModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -848,53 +979,38 @@ function selectDepositTon(val) {
 
 async function sendTonDeposit() {
     if (!tonConnectUI.connected) {
-        alert('Пожалуйста, подключите ваш кошелек с помощью кнопки вверху модального окна!');
+        showToast('Пожалуйста, подключите кошелек!', false);
         return;
     }
 
     let input = document.getElementById('customTonInput');
-    let gramAmount = parseFloat(input ? input.value : 1.0); // 1 TON = 1 GRAM
+    let gramAmount = parseFloat(input ? input.value : 1.0);
 
     if (isNaN(gramAmount) || gramAmount <= 0) {
-        alert('Введите корректную сумму!');
+        showToast('Введите корректную сумму!', false);
         return;
     }
 
-    // Переводим GRAM в наноторы (1 TON/GRAM = 1,000,000,000 нано)
     let nanoAmount = Math.floor(gramAmount * 1_000_000_000).toString();
-    
-    // ВНИМАНИЕ: Замените на ваш реальный адрес кошелька в сети TON!
     const MERCHANT_WALLET = 'UQBDFjzLt03Y8uPDwLwQF7y_3DQI0hLA6-iV8srfE31_MweH'; 
 
     const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 600, // Срок жизни транзакции 10 минут
-        messages: [
-            {
-                address: MERCHANT_WALLET,
-                amount: nanoAmount,
-                payload: "te6cckEBAQEADgAAGiB1c2VyX2lk_" + userId // Метка с ID пользователя
-            }
-        ]
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+        messages: [{ address: MERCHANT_WALLET, amount: nanoAmount, payload: "te6cckEBAQEADgAAGiB1c2VyX2lk_" + userId }]
     };
 
     try {
         closeDepositModal();
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
         
-        // Запрос подписи транзакции в кошельке игрока
         const result = await tonConnectUI.sendTransaction(transaction);
-        
-        console.log("Транзакция отправлена:", result);
-
-        // Начисляем GRAM игроку 1 к 1
         score += gramAmount;
         updateBalance();
 
-        alert(`Оплата прошла успешно! Вам зачислено +${gramAmount.toFixed(2)} GRAM.`);
+        showToast(`Оплата прошла! Зачислено +${gramAmount.toFixed(2)} GRAM.`, true);
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 
     } catch (e) {
-        console.error("Ошибка транзакции:", e);
-        alert('Оплата была отменена или произошла ошибка.');
+        showToast('Оплата отменена или произошла ошибка.', false);
     }
 }

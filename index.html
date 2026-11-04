@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Arcade Hub GRAM</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Подключаем TON Connect UI SDK -->
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <style>
         :root {
@@ -37,6 +36,44 @@
             height: 100vh;
             height: 100dvh;
             overflow: hidden; 
+        }
+
+        /* Стиль для всплывающих неблокирующих уведомлений сверху */
+        #toast-container {
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 90%;
+            max-width: 380px;
+            pointer-events: none;
+        }
+        .toast-msg {
+            background: rgba(239, 68, 68, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: auto;
+        }
+        .toast-msg.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast-msg.success {
+            background: rgba(16, 185, 129, 0.85);
         }
 
         /* Верхняя панель */
@@ -127,7 +164,7 @@
         .card-box {
             border-radius: 24px; padding: 16px; 
             display: flex; flex-direction: column; justify-content: space-between; 
-            cursor: pointer; min-height: 155px; position: relative; overflow: hidden;
+            cursor: pointer; min-height: 145px; position: relative; overflow: hidden;
             backdrop-filter: blur(10px);
             transition: transform 0.2s, box-shadow 0.2s;
         }
@@ -152,69 +189,101 @@
             border: 1px solid rgba(239, 68, 68, 0.35); 
         }
 
-        .card-content { position: relative; z-index: 2; width: 60%; }
+        .card-content { position: relative; z-index: 2; width: 100%; }
         .card-content h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
-        .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-        .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 10px; display: inline-block; }
+        .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
+        .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 14px; display: inline-block; }
         
-        .card-illustration-big { 
-            position: absolute; right: -5px; bottom: -5px; 
-            width: 100px; height: 100px; object-fit: contain; 
-            z-index: 1; 
-            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); 
-        }
-        .card-illustration { 
-            position: absolute; right: -10px; bottom: -10px; 
-            width: 80px; height: 80px; object-fit: contain; 
-            z-index: 1; opacity: 0.9; 
-        }
-
-        /* ИГРОВЫЕ ЭКРАНЫ И КОНТРОЛЛЕРЫ */
+        /* Игровые экраны */
         .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-        .escape-canvas-wrap { position: relative; width: 100%; max-width: 320px; height: 220px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+        .escape-canvas-wrap { position: relative; width: 100%; max-width: 320px; height: 180px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
         #escapeCanvas { width: 300px; height: 300px; }
         #arenaCanvas { width: 100%; height: 100%; border-radius: 16px; background: #0b1120; border: 1.5px solid rgba(56, 189, 248, 0.3); box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
         
+        .arena-players-list {
+            display: flex; flex-direction: column; gap: 8px;
+            width: 100%; margin: 10px 0; max-height: 140px; overflow-y: auto;
+        }
+        .arena-player-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 18px; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+        .arena-player-left { display: flex; align-items: center; gap: 10px; }
+        .arena-player-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 800; color: #fff;
+        }
+        .arena-player-info h4 { margin: 0 0 2px 0; font-size: 13px; font-weight: 700; color: #f8fafc; }
+        .arena-player-info p { margin: 0; font-size: 11px; color: var(--text-sec); }
+        .arena-player-right { text-align: right; }
+        .arena-player-chance { font-size: 13px; font-weight: 800; color: #f8fafc; margin: 0 0 2px 0; }
+        .arena-player-bet { font-size: 11px; font-weight: 700; color: var(--accent-gold); margin: 0; text-align: right; }
+
+        #arenaWinModal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(7, 9, 19, 0.85); backdrop-filter: blur(12px);
+            z-index: 2000; justify-content: center; align-items: center; padding: 20px;
+        }
+        .win-modal-content {
+            background: linear-gradient(135deg, #121a29 0%, #0b1120 100%);
+            border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 28px;
+            padding: 24px 20px; width: 100%; max-width: 340px;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+        }
+        .win-modal-badge {
+            background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px; padding: 8px 18px; font-size: 14px; font-weight: 700;
+            color: #f8fafc; margin-bottom: 20px;
+        }
+        .win-modal-card {
+            background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color);
+            border-radius: 20px; width: 100%; padding: 20px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 24px;
+        }
+        .win-modal-amount { font-size: 28px; font-weight: 900; color: #f8fafc; margin: 0; }
+        .win-modal-close-btn {
+            background: linear-gradient(135deg, #2dd4bf, #0d9488); color: #070913;
+            border: none; width: 100%; padding: 14px; border-radius: 18px;
+            font-size: 15px; font-weight: 800; cursor: pointer; text-align: center;
+        }
+
         .escape-outcomes { display: flex; justify-content: space-between; width: 100%; max-width: 300px; margin: 0 auto 8px auto; padding: 0 10px; font-size: 13px; font-weight: 700; color: #64748b; }
         .escape-status-bar { width: 100%; height: 8px; border-radius: 4px; display: flex; overflow: hidden; margin-bottom: 12px; background: #1e293b; }
         .status-green { background: var(--accent-green); flex: 1; }
         .status-red { background: #ef4444; flex: 1; }
 
-        .control-panel { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 8px; margin: 0 auto; }
+        .control-panel { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 10px; margin: 0 auto; }
         .presets-row { display: flex; gap: 6px; justify-content: center; }
         .preset-btn { 
             background: var(--card-bg); border: 1px solid var(--border-color); 
-            color: #cbd5e1; padding: 8px; border-radius: 14px; 
+            color: #cbd5e1; padding: 10px; border-radius: 14px; 
             font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; 
-            transition: background 0.1s;
         }
-        .preset-btn:active { background: rgba(255,255,255,0.1); }
-        
         .actions-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
         .pill-box { 
             background: var(--card-bg); border: 1px solid var(--border-color); 
-            border-radius: 16px; padding: 8px 12px; display: flex; align-items: center; 
+            border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; 
             gap: 6px; font-size: 12px; font-weight: 700; flex: 1; justify-content: center; color: var(--text-sec); 
         }
         .pill-box input { background: transparent; border: none; color: #fff; font-size: 15px; font-weight: 800; width: 70px; text-align: center; outline: none; }
 
         .currency-tabs { display: flex; background: var(--card-bg); border-radius: 16px; padding: 3px; gap: 3px; border: 1px solid var(--border-color); }
         .curr-tab { flex: 1; background: transparent; border: none; color: var(--text-sec); padding: 6px; font-size: 12px; font-weight: 700; border-radius: 13px; cursor: pointer; text-align: center; }
-        .curr-tab.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .curr-tab.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
 
         .main-action-btn { 
             background: linear-gradient(135deg, #10b981, #059669); color: white; 
             border: none; width: 100%; padding: 14px; border-radius: 18px; 
             font-size: 15px; font-weight: 800; cursor: pointer; text-align: center; 
             box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-            transition: transform 0.1s, box-shadow 0.1s;
         }
-        .main-action-btn:active { transform: scale(0.98); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2); }
-        
         .back-btn { 
             background: var(--card-bg); color: #cbd5e1; border: 1px solid var(--border-color); 
             padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; 
-            cursor: pointer; align-self: flex-start; margin-bottom: 8px; 
+            cursor: pointer; align-self: flex-start; margin-bottom: 6px; 
         }
 
         /* МИНЫ */
@@ -224,11 +293,9 @@
             aspect-ratio: 1; background: var(--card-bg); border: 1px solid var(--border-color); 
             border-radius: 14px; display: flex; align-items: center; justify-content: center; 
             font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; 
-            transition: transform 0.1s, background 0.2s; 
         }
-        .cell:active { transform: scale(0.9); }
-        .cell.safe { background: rgba(6, 78, 59, 0.8); border-color: var(--accent-green); color: var(--accent-green); box-shadow: 0 0 12px rgba(16, 185, 129, 0.3); }
-        .cell.mine { background: rgba(127, 29, 29, 0.9); border-color: #ef4444; color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+        .cell.safe { background: rgba(6, 78, 59, 0.8); border-color: var(--accent-green); color: var(--accent-green); }
+        .cell.mine { background: rgba(127, 29, 29, 0.9); border-color: #ef4444; color: #ef4444; }
         
         .mines-info-bar { 
             display: flex; justify-content: space-between; width: 100%; max-width: 300px; 
@@ -237,7 +304,7 @@
         }
         .mines-info-bar span { color: var(--accent-blue); }
 
-        /* ПРОФИЛЬ И НАСТРОЙКИ */
+        /* ПРОФИЛЬ */
         .profile-header-card { 
             background: var(--card-bg); border: 1px solid var(--border-color); 
             border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; 
@@ -254,7 +321,6 @@
         .ref-card, .settings-card { 
             background: var(--card-bg); border: 1px solid var(--border-color); 
             border-radius: 20px; padding: 16px; margin-bottom: 12px; 
-            backdrop-filter: blur(10px);
         }
         .ref-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
         .ref-subtitle { font-size: 12px; color: var(--text-sec); margin-bottom: 12px; }
@@ -267,7 +333,7 @@
         .ref-share-btn { 
             background: var(--accent-blue); color: #000; border-radius: 50%; 
             width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; 
-            font-size: 14px; font-weight: bold; cursor: pointer; flex-shrink: 0; border: none; 
+            font-size: 14px; font-weight: bold; cursor: pointer; border: none; 
         }
         
         .ref-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -301,16 +367,11 @@
         input:checked + .slider { background-color: var(--accent-green); }
         input:checked + .slider:before { transform: translateX(18px); }
 
-        /* Нижнее меню (Dock Bar) с иконками SVG */
         .nav-bar { 
-            background: rgba(13, 18, 32, 0.85); 
-            backdrop-filter: blur(16px); 
-            border: 1px solid var(--border-color); 
-            border-radius: 24px; 
-            width: 100%; max-width: 420px; 
-            display: flex; justify-content: space-around; 
-            padding: 6px; margin-top: 6px; flex-shrink: 0; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: rgba(13, 18, 32, 0.85); backdrop-filter: blur(16px); 
+            border: 1px solid var(--border-color); border-radius: 24px; 
+            width: 100%; max-width: 420px; display: flex; justify-content: space-around; 
+            padding: 6px; margin-top: 6px; flex-shrink: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         .nav-item { 
             display: flex; flex-direction: column; align-items: center; gap: 3px; 
@@ -324,19 +385,21 @@
 </head>
 <body>
 
+    <!-- Контейнер для плавающих тост-уведомлений -->
+    <div id="toast-container"></div>
+
     <div class="top-bar">
         <div class="profile-badge">
             <div class="profile-avatar" id="avatar-initials">US</div>
             <span id="username">Игрок</span>
         </div>
         <div class="stars-badge">
-            <span id="balance">50.00</span> GRAM
-            <!-- Плюс вверху теперь тоже открывает окно пополнения TON Connect -->
+            <span id="balance">0.00</span> GRAM
             <div class="plus-btn" onclick="openDepositModal()">+</div>
         </div>
     </div>
 
-    <!-- ЭКРАН 1: ИГРЫ -->
+    <!-- ЭКРАН 1: ИГРЫ (Без картинок-заглушек) -->
     <div id="screen-games" class="screen active">
         <div class="menu-title">Arcade Hub</div>
 
@@ -355,7 +418,6 @@
                     <p>Поймай множитель</p>
                     <span class="card-link">Играть &rarr;</span>
                 </div>
-                <img src="rocket.png" class="card-illustration-big" alt="escape">
             </div>
             
             <div class="card-box mines" onclick="openGame('mines')">
@@ -364,26 +426,23 @@
                     <p>Найди кристаллы</p>
                     <span class="card-link">Играть &rarr;</span>
                 </div>
-                <img src="mines.png" class="card-illustration-big" alt="mines">
             </div>
         </div>
 
         <div class="games-row-bottom">
-            <div class="card-box upgrade" onclick="alert('Апгрейд скоро!')">
+            <div class="card-box upgrade" onclick="showToast('Апгрейд скоро будет доступен!', false)">
                 <div class="card-content">
                     <h3>АПГРЕЙД</h3>
                     <p>Улучшай лут</p>
                     <span class="card-link">Скоро &rarr;</span>
                 </div>
-                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" class="card-illustration" alt="upgrade">
             </div>
-            <div class="card-box slots" onclick="alert('Слоты скоро!')">
+            <div class="card-box slots" onclick="showToast('Слоты скоро будут доступны!', false)">
                 <div class="card-content">
                     <h3>СЛОТЫ</h3>
                     <p>Джекпот</p>
                     <span class="card-link">Скоро &rarr;</span>
                 </div>
-                <img src="https://cdn-icons-png.flaticon.com/512/1170/1170679.png" class="card-illustration" alt="slots">
             </div>
         </div>
     </div>
@@ -391,19 +450,22 @@
     <!-- ЭКРАН: ICE ARENA -->
     <div id="screen-iceArena" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-        <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center;">ICE ARENA</div>
+        <div class="menu-title" style="font-size: 18px; margin-bottom: 2px; text-align: center;">ICE ARENA</div>
         
         <div class="escape-container">
-            <div class="escape-canvas-wrap" style="width: 100%; height: 220px;">
-                <canvas id="arenaCanvas" width="340" height="220"></canvas>
+            <div class="escape-canvas-wrap" style="width: 100%; height: 180px;">
+                <canvas id="arenaCanvas" width="340" height="180"></canvas>
             </div>
-            <div id="arenaTimerText" style="font-size: 13px; font-weight: 700; color: var(--accent-blue); margin: 6px 0;">Ожидание игроков...</div>
+            
+            <div class="arena-players-list" id="arenaPlayersList"></div>
+
+            <div id="arenaTimerText" style="font-size: 13px; font-weight: 700; color: var(--accent-blue); margin: 2px 0;">Ожидание игроков...</div>
         </div>
 
         <div class="control-panel" style="margin-top: 4px;">
             <div class="mines-info-bar" style="max-width: 100%;">
                 <div>Банк: <span id="arenaTotalBank">0.00</span> GRAM</div>
-                <div>Комиссия: <span style="color:#ef4444;">5%</span></div>
+                <div>Комиссия: <span style="color:#ef4444;">25%</span></div>
             </div>
             <div class="presets-row">
                 <button class="preset-btn" onclick="setArenaBet(0.25)">0.25</button>
@@ -418,11 +480,22 @@
                     <span>GRAM</span>
                 </div>
             </div>
-            <button class="main-action-btn" id="arenaActionBtn" onclick="joinArenaGame()">Сделать ставку и войти</button>
+            <button class="main-action-btn" id="arenaActionBtn" onclick="joinArenaGame()">Поставить 0.25 GRAM</button>
         </div>
     </div>
 
-    <!-- ЭКРАН 2: ESCAPE -->
+    <!-- Модальное окно победы Арены -->
+    <div id="arenaWinModal">
+        <div class="win-modal-content">
+            <div class="win-modal-badge" id="winModalBadgeText">@username • 100%</div>
+            <div class="win-modal-card">
+                <div class="win-modal-amount" id="winModalAmountText">+0.00</div>
+            </div>
+            <button class="win-modal-close-btn" onclick="closeArenaWinModal()">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- ESCAPE -->
     <div id="screen-escape" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="escape-container">
@@ -432,8 +505,7 @@
         </div>
         <div class="control-panel">
             <div class="currency-tabs">
-                <button class="curr-tab active">GRAM</button>
-                <button class="curr-tab" onclick="alert('TON скоро!')">TON</button>
+                <button class="curr-tab active">БАЛАНС</button>
             </div>
             <div class="presets-row">
                 <button class="preset-btn" onclick="multiplyEscapeBet(0.5)">/2</button>
@@ -441,18 +513,18 @@
                 <button class="preset-btn" onclick="maxEscapeBet()">Max</button>
             </div>
             <div class="actions-row">
-                <div class="pill-box"><input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25"><span>GRAM</span></div>
+                <div class="pill-box"><input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25"><span>СТАВКА</span></div>
             </div>
             <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()">Играть</button>
         </div>
     </div>
 
-    <!-- ЭКРАН 3: МИНЫ -->
+    <!-- МИНЫ -->
     <div id="screen-mines" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="mines-info-bar">
             <div>Множитель: <span id="minesMultiplier">1.00x</span></div>
-            <div>Выигрыш: <span id="minesWinAmount">0.00 GRAM</span></div>
+            <div>Выигрыш: <span id="minesWinAmount">0.00</span></div>
         </div>
         <div class="grid-container"><div class="grid" id="grid"></div></div>
         <div class="control-panel">
@@ -478,7 +550,6 @@
     <!-- ПРОФИЛЬ -->
     <div id="screen-profile" class="screen">
         <div class="menu-title">Профиль</div>
-
         <div class="profile-header-card">
             <div class="profile-avatar-large" id="profile-avatar-large">US</div>
             <div class="profile-user-info">
@@ -489,41 +560,30 @@
 
         <div class="ref-card">
             <div class="ref-title">Реферальная система</div>
-            <div class="ref-subtitle" id="ref-invited-by">Приглашайте друзей и получайте бонус</div>
-            
+            <div class="ref-subtitle">Приглашайте друзей и получайте бонус</div>
             <div class="ref-link-box">
                 <input type="text" id="refLinkInput" readonly value="">
                 <button class="ref-share-btn" onclick="shareRefLink()">&#10148;</button>
             </div>
-
             <div class="ref-stats-row">
-                <div class="ref-stat-box">
-                    <h4 id="refCount">0</h4>
-                    <p>Друзей</p>
-                </div>
-                <div class="ref-stat-box">
-                    <h4 id="refEarned">0.00</h4>
-                    <p>Заработано GRAM</p>
-                </div>
+                <div class="ref-stat-box"><h4 id="refCount">0</h4><p>Друзей</p></div>
+                <div class="ref-stat-box"><h4 id="refEarned">0.00</h4><p>Заработано GRAM</p></div>
             </div>
-
             <button class="ref-claim-btn" onclick="claimRefRewards()">Забрать награду</button>
         </div>
 
         <div class="settings-card">
             <div class="cashback-top">
-                <div>
-                    <h4>Кешбек</h4>
-                    <p>Возврат 15% от проигрышей за неделю.</p>
-                </div>
+                <div><h4>Кешбек</h4><p>Возврат 15% от проигрышей за неделю.</p></div>
             </div>
-            <div class="cashback-amount">
-                <span id="cashbackBalance">0.00 GRAM</span> Доступно
-            </div>
+            <div class="cashback-amount"><span id="cashbackBalance">0.00 GRAM</span> Доступно</div>
             <button class="cashback-btn" onclick="claimCashback()">Получить <span id="cashbackBtnVal">0.00</span> GRAM</button>
 
-            <!-- Кнопка пополнения -->
-            <div class="settings-item-row" onclick="openDepositModal()">
+            <button id="demoModeToggleBtn" class="main-action-btn" style="margin-top: 12px; background: linear-gradient(135deg, #3b82f6, #1d4ed8);" onclick="toggleDemoMode()">
+                Включить Демо-режим (Тест)
+            </button>
+
+            <div class="settings-item-row" onclick="openDepositModal()" style="margin-top: 10px;">
                 <span>Пополнить баланс (TON / GRAM)</span>
                 <span style="color: var(--text-sec);">&rsaquo;</span>
             </div>
@@ -538,7 +598,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно пополнения через TON Connect -->
+    <!-- Модальное окно пополнения -->
     <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,19,0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
         <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:24px; padding:20px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -546,28 +606,23 @@
                 <span onclick="closeDepositModal()" style="font-size:22px; cursor:pointer; color:var(--text-sec);">&times;</span>
             </div>
             <p style="margin:0; font-size:12px; color:var(--text-sec);">Курс 1 к 1 (1 TON = 1 GRAM). Выберите сумму:</p>
-            
-            <!-- Кнопка подключения TON Connect -->
-            <div id="ton-connect-button" style="display:flex; justify-content:center; margin: 5px 0;"></div>
-
+            <div id="ton-connect-button" style="display:flex; justify-content:center; margin: 5px 0; width: 100%;"></div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <button class="preset-btn" onclick="selectDepositTon(1.0)">1 GRAM</button>
                 <button class="preset-btn" onclick="selectDepositTon(5.0)">5 GRAM</button>
                 <button class="preset-btn" onclick="selectDepositTon(10.0)">10 GRAM</button>
                 <button class="preset-btn" onclick="selectDepositTon(50.0)">50 GRAM</button>
             </div>
-
             <div class="pill-box" style="width:100%;">
                 <span>GRAM</span>
                 <input type="number" id="customTonInput" value="1.0" min="0.1" step="0.1">
                 <span>СУММА</span>
             </div>
-
             <button class="main-action-btn" onclick="sendTonDeposit()">Оплатить</button>
         </div>
     </div>
 
-    <!-- Нижняя панель (Dock Bar) с иконками SVG -->
+    <!-- Нижняя панель -->
     <div class="nav-bar">
         <button class="nav-item active" onclick="switchNav('games', this)">
             <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
