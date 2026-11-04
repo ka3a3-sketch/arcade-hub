@@ -117,13 +117,14 @@ function toggleSound(checkbox) {
     soundEnabled = checkbox.checked;
 }
 
-// ================= ICE ARENA (OPTIMIZED MULTIPLAYER) =================
+// ================= ICE ARENA (OPTIMIZED MULTIPLAYER WITH CONNECTION CHECK) =================
 let arenaState = 'IDLE'; // IDLE, WAITING, SPINNING, FINISHED
 let arenaPlayers = []; 
 let arenaTotalBank = 0;
 let arenaTimer = 15;
 let arenaTimerInterval = null;
 let winningPlayerId = null;
+let isWsConnected = false; 
 
 const arenaCanvas = document.getElementById('arenaCanvas');
 const arenaCtx = arenaCanvas ? arenaCanvas.getContext('2d') : null;
@@ -132,15 +133,30 @@ const arenaActionBtn = document.getElementById('arenaActionBtn');
 const arenaTimerText = document.getElementById('arenaTimerText');
 const arenaTotalBankEl = document.getElementById('arenaTotalBank');
 
-let puck = { x: 170, y: 90, vx: 0, vy: 0, radius: 10, speed: 0 };
+let puck = { x: -50, y: -50, vx: 0, vy: 0, radius: 10, speed: 0 };
 let arenaAnimId = null;
 let spinStartTimeMs = 0;
 
-// Подключение к вашему серверу Render
+// Подключение к серверу Render
 const ws = new WebSocket('wss://game-backend-ht4v.onrender.com');
 
 ws.onopen = () => {
-    console.log("WebSocket подключен к Айс Арене!");
+    isWsConnected = true;
+    console.log("WebSocket успешно подключен!");
+    if (arenaTimerText && arenaState === 'IDLE') {
+        arenaTimerText.innerText = "Сервер на связи. Сделайте ставку!";
+    }
+};
+
+ws.onclose = () => {
+    isWsConnected = false;
+    console.log("WebSocket отключен.");
+    if (arenaTimerText) arenaTimerText.innerText = "Нет связи с сервером (переподключение)...";
+};
+
+ws.onerror = (error) => {
+    isWsConnected = false;
+    console.error("Ошибка WebSocket:", error);
 };
 
 ws.onmessage = (event) => {
@@ -156,7 +172,7 @@ ws.onmessage = (event) => {
     
     if (data.type === 'TIMER_UPDATE') {
         arenaTimer = data.timer;
-        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с (нужно 2 игрока)`;
+        if (arenaTimerText) arenaTimerText.innerText = `Старт через: ${arenaTimer}с (ожидание игроков)`;
     }
 
     if (data.type === 'SPIN_START') {
@@ -180,7 +196,7 @@ function resetArenaVisuals() {
     arenaPlayers = [];
     arenaTotalBank = 0;
     winningPlayerId = null;
-    puck.x = -50; puck.y = -50; // Прячем шайбу до старта
+    puck.x = -50; puck.y = -50; 
     if (arenaTimerInterval) clearInterval(arenaTimerInterval);
     if (arenaActionBtn) {
         arenaActionBtn.style.display = 'block';
@@ -188,7 +204,9 @@ function resetArenaVisuals() {
         arenaActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
         arenaActionBtn.onclick = joinArenaGame;
     }
-    if (arenaTimerText) arenaTimerText.innerText = "Ожидание второго игрока или бота...";
+    if (arenaTimerText) {
+        arenaTimerText.innerText = isWsConnected ? "Готово к игре. Сделайте ставку!" : "Просыпается сервер, подождите 10 сек...";
+    }
     updateArenaSectors();
     drawArenaFrame();
     renderArenaParticipantsList();
@@ -196,6 +214,12 @@ function resetArenaVisuals() {
 
 function joinArenaGame() {
     if (arenaState === 'SPINNING') return;
+
+    if (!isWsConnected || ws.readyState !== WebSocket.OPEN) {
+        alert('Сервер еще «просыпается» после долгого сна ( Render.com ). Пожалуйста, подождите еще 10–20 секунд и попробуйте снова!');
+        return;
+    }
+
     let betVal = parseFloat(parseFloat(arenaBetInput.value || 0.25).toFixed(2));
     
     if (betVal < 0.25) { alert('Минимальная ставка 0.25 GRAM!'); return; }
@@ -204,17 +228,13 @@ function joinArenaGame() {
     score = parseFloat((score - betVal).toFixed(2));
     updateBalance();
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            type: 'JOIN_ARENA',
-            userId: userId,
-            name: userName,
-            bet: betVal,
-            color: '#3b82f6'
-        }));
-    } else {
-        alert('Нет соединения с сервером!');
-    }
+    ws.send(JSON.stringify({
+        type: 'JOIN_ARENA',
+        userId: userId,
+        name: userName,
+        bet: betVal,
+        color: '#3b82f6'
+    }));
 
     if (arenaActionBtn) {
         arenaActionBtn.innerText = "Вы в игре! Ожидание соперника...";
@@ -240,23 +260,25 @@ function updateArenaSectors() {
 }
 
 function drawArenaFrame() {
-    if (!arenaCtx) return;
-    arenaCtx.clearRect(0, 0, 340, 180);
+    if (!arenaCtx || !arenaCanvas) return;
+    
+    let fieldWidth = arenaCanvas.width || 340;
+    let fieldHeight = arenaCanvas.height || 180;
+
+    arenaCtx.clearRect(0, 0, fieldWidth, fieldHeight);
 
     let total = arenaPlayers.reduce((sum, p) => sum + p.bet, 0);
     if (total <= 0) {
         arenaCtx.fillStyle = '#1e293b';
-        arenaCtx.fillRect(0, 0, 340, 180);
+        arenaCtx.fillRect(0, 0, fieldWidth, fieldHeight);
         arenaCtx.fillStyle = '#64748b';
         arenaCtx.font = '14px sans-serif';
         arenaCtx.textAlign = 'center';
         arenaCtx.textBaseline = 'middle';
-        arenaCtx.fillText("Сделайте ставку для начала игры...", 170, 90);
+        arenaCtx.fillText("Сделайте ставку для начала игры...", fieldWidth / 2, fieldHeight / 2);
         return;
     }
 
-    let fieldWidth = 340;
-    let fieldHeight = 180;
     let currentX = 0;
 
     arenaPlayers.forEach(p => {
@@ -269,12 +291,11 @@ function drawArenaFrame() {
         let isLoser = (winningPlayerId && p.id !== winningPlayerId);
 
         arenaCtx.save();
-        if (isLoser) arenaCtx.globalAlpha = 0.3; // Затемняем проигравших
+        if (isLoser) arenaCtx.globalAlpha = 0.3; 
 
         arenaCtx.fillStyle = p.color || '#3b82f6';
         arenaCtx.fillRect(currentX, 0, sliceWidth, fieldHeight);
 
-        // Ярко-белая обводка для победителя
         if (isWinner) {
             arenaCtx.strokeStyle = '#ffffff';
             arenaCtx.lineWidth = 4;
@@ -288,7 +309,6 @@ function drawArenaFrame() {
             arenaCtx.strokeRect(currentX, 0, sliceWidth, fieldHeight);
         }
 
-        // Рендерим аватарку/инициалы в центре зоны, ЕСЛИ шанс игрока > 10%
         let percent = (p.bet / total) * 100;
         if (percent > 10) {
             let avatarX = currentX + sliceWidth / 2;
@@ -314,7 +334,6 @@ function drawArenaFrame() {
         currentX += sliceWidth;
     });
 
-    // Рисуем шайбу, если игра идет или завершена
     if (arenaState === 'SPINNING' || arenaState === 'FINISHED') {
         arenaCtx.beginPath();
         arenaCtx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
@@ -327,7 +346,6 @@ function drawArenaFrame() {
         arenaCtx.strokeStyle = '#0f172a';
         arenaCtx.stroke();
 
-        // Стрелочка направления полета (первые 3 секунды вращения)
         if (arenaState === 'SPINNING' && (Date.now() - spinStartTimeMs < 3000)) {
             let angle = Math.atan2(puck.vy, puck.vx);
             arenaCtx.save();
@@ -337,18 +355,16 @@ function drawArenaFrame() {
             arenaCtx.moveTo(15, 0);
             arenaCtx.lineTo(25, -6);
             arenaCtx.lineTo(25, 6);
-            arenaCtx.fillStyle = '#facc15'; // Ярко-желтая стрелка
+            arenaCtx.fillStyle = '#facc15'; 
             arenaCtx.fill();
             arenaCtx.restore();
         }
     }
 }
 
-// Рендер списка участников под ареной
 function renderArenaParticipantsList() {
     let container = document.getElementById('arenaParticipantsList');
     if (!container) {
-        // Если контейнера еще нет в HTML, создадим его динамически под канвасом
         const canvasParent = arenaCanvas ? arenaCanvas.parentNode : null;
         if (canvasParent) {
             container = document.createElement('div');
@@ -396,7 +412,6 @@ function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
     if (arenaTimerText) arenaTimerText.innerText = "Шайба запущена!";
     if (arenaActionBtn) arenaActionBtn.style.display = 'none';
 
-    // Появляется в случайном месте на карте при старте
     puck.x = Math.random() * 280 + 30; 
     puck.y = Math.random() * 120 + 30;
     
@@ -435,8 +450,6 @@ function triggerServerSpinAnimation(targetStopX, winnerName, netWin) {
 
 function showServerWinner(winnerName, netWin) {
     let numericNetWin = parseFloat(netWin);
-
-    // Проверяем, победил ли текущий пользователь (по ID или по имени)
     let userWon = arenaPlayers.some(p => p.id === userId && p.id === winningPlayerId) || (winnerName === userName);
 
     if (userWon) {
