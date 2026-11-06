@@ -38,7 +38,6 @@
             overflow: hidden; 
         }
 
-        /* Стиль для всплывающих неблокирующих уведомлений сверху */
         #toast-container {
             position: fixed;
             top: 15px;
@@ -76,7 +75,6 @@
             background: rgba(16, 185, 129, 0.85);
         }
 
-        /* Верхняя панель */
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -126,7 +124,6 @@
         }
         .plus-btn:active { transform: scale(0.9); }
 
-        /* Экраны */
         .screen { 
             width: 100%; max-width: 420px; 
             flex-grow: 1; display: none; 
@@ -144,7 +141,6 @@
             letter-spacing: -0.5px;
         }
 
-        /* Баннеры и карточки игр */
         .card-banner {
             border-radius: 24px; padding: 20px; 
             display: flex; justify-content: space-between; align-items: center; 
@@ -194,7 +190,6 @@
         .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
         .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 14px; display: inline-block; }
         
-        /* Игровые экраны */
         .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
         .escape-canvas-wrap { position: relative; width: 100%; max-width: 320px; height: 180px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
         #escapeCanvas { width: 300px; height: 300px; }
@@ -286,7 +281,6 @@
             cursor: pointer; align-self: flex-start; margin-bottom: 6px; 
         }
 
-        /* МИНЫ */
         .grid-container { width: 100%; max-width: 300px; margin: 0 auto 6px auto; }
         .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
         .cell { 
@@ -304,7 +298,6 @@
         }
         .mines-info-bar span { color: var(--accent-blue); }
 
-        /* ПРОФИЛЬ */
         .profile-header-card { 
             background: var(--card-bg); border: 1px solid var(--border-color); 
             border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; 
@@ -385,7 +378,6 @@
 </head>
 <body>
 
-    <!-- Контейнер для плавающих тост-уведомлений -->
     <div id="toast-container"></div>
 
     <div class="top-bar">
@@ -399,9 +391,17 @@
         </div>
     </div>
 
-    <!-- ЭКРАН 1: ИГРЫ (Без картинок-заглушек) -->
+    <!-- ЭКРАН 1: ИГРЫ -->
     <div id="screen-games" class="screen active">
         <div class="menu-title">Arcade Hub</div>
+
+        <div class="card-banner upgrade-ice" onclick="openGame('iceUpgrade')" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(234, 179, 8, 0.4); box-shadow: 0 8px 30px rgba(234, 179, 8, 0.15); margin-bottom: 12px;">
+            <div class="card-content">
+                <h3>ICE UPGRADE</h3>
+                <p>Выбирай шанс, крути шайбу и умножай GRAM</p>
+                <span class="card-link">Играть &rarr;</span>
+            </div>
+        </div>
 
         <div class="card-banner arena" onclick="openGame('iceArena')">
             <div class="card-content">
@@ -447,6 +447,42 @@
         </div>
     </div>
 
+    <!-- ЭКРАН: ICE UPGRADE -->
+    <div id="screen-iceUpgrade" class="screen">
+        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
+        <div class="menu-title" style="font-size: 18px; margin-bottom: 2px; text-align: center;">ICE UPGRADE</div>
+        
+        <div class="escape-container">
+            <div id="upgradeCanvasWrap" style="width: 280px; height: 280px; background: #0b1120; border-radius: 24px; border: 1.5px solid rgba(234, 179, 8, 0.3); overflow: hidden; position: relative; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.6);">
+                <canvas id="upgradeCanvas" width="280" height="280" style="width:100%; height:100%; display:block; transform-origin: center center; transition: none;"></canvas>
+            </div>
+            
+            <div style="width: 100%; max-width: 340px; margin: 12px 0 4px 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-sec); margin-bottom: 4px;">
+                    <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">66</span>%</span>
+                    <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.48x</span></span>
+                </div>
+                <input type="range" id="upgradeChanceRange" min="5" max="95" value="66" step="1" style="width: 100%; cursor: pointer;" oninput="updateUpgradeChance(this.value)">
+            </div>
+        </div>
+
+        <div class="control-panel" style="margin-top: 4px;">
+            <div class="presets-row">
+                <button class="preset-btn" onclick="multiplyUpgradeBet(0.5)">/2</button>
+                <button class="preset-btn" onclick="multiplyUpgradeBet(2)">x2</button>
+                <button class="preset-btn" onclick="maxUpgradeBet()">Max</button>
+            </div>
+            <div class="actions-row">
+                <div class="pill-box" style="width: 100%;">
+                    <span>СТАВКА</span>
+                    <input type="number" id="upgradeBetInput" value="0.25" min="0.25" step="0.25">
+                    <span>GRAM</span>
+                </div>
+            </div>
+            <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()" style="background: linear-gradient(135deg, #10b981, #059669);">Сделать ставку</button>
+        </div>
+    </div>
+
     <!-- ЭКРАН: ICE ARENA -->
     <div id="screen-iceArena" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
@@ -484,7 +520,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно победы Арены -->
     <div id="arenaWinModal">
         <div class="win-modal-content">
             <div class="win-modal-badge" id="winModalBadgeText">@username • 100%</div>
@@ -542,7 +577,6 @@
         </div>
     </div>
 
-    <!-- ОСТАЛЬНЫЕ ЭКРАНЫ -->
     <div id="screen-tasks" class="screen"><div class="menu-title">Задания</div><p style="color:var(--text-sec);">Выполняйте задания для получения GRAM.</p></div>
     <div id="screen-inventory" class="screen"><div class="menu-title">Инвентарь</div><p style="color:var(--text-sec);">Ваши бустеры и кейсы.</p></div>
     <div id="screen-leaders" class="screen"><div class="menu-title">Лидеры</div><p style="color:var(--text-sec);">Топ игроков по балансу GRAM.</p></div>
@@ -598,7 +632,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно пополнения -->
     <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,19,0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
         <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:24px; padding:20px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -622,7 +655,6 @@
         </div>
     </div>
 
-    <!-- Нижняя панель -->
     <div class="nav-bar">
         <button class="nav-item active" onclick="switchNav('games', this)">
             <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
@@ -646,6 +678,12 @@
         </button>
     </div>
 
-    <script src="game.js"></script>
+    <!-- Подключаем модули JS -->
+    <script type="module" src="js/core.js"></script>
+    <script type="module" src="js/iceUpgrade.js"></script>
+    <script type="module" src="js/iceArena.js"></script>
+    <script type="module" src="js/escape.js"></script>
+    <script type="module" src="js/mines.js"></script>
+    <script type="module" src="js/tonConnect.js"></script>
 </body>
 </html>
