@@ -1,1439 +1,684 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Arcade Hub GRAM</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
-<style>
-:root {
---bg-color: #0b0e14;
---bg-secondary: #111622;
---card-bg: rgba(22, 28, 40, 0.76);
---card-solid: #161c28;
---card-elevated: rgba(30, 38, 54, 0.65);
---border-color: rgba(255, 255, 255, 0.07);
---border-highlight: rgba(255, 255, 255, 0.13);
---accent-gold: #fbbf24;
---accent-gold-matte: #f59e0b;
---accent-green: #10b981;
---accent-green-dark: #059669;
---accent-blue: #fbbf24;
---accent-ruby: #ef4444;
---text-main: #f8fafc;
---text-sec: #94a3b8;
---text-muted: #64748b;
---radius-lg: 24px;
---radius-md: 20px;
---radius-sm: 16px;
---shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.5);
---shadow-deep: 0 20px 45px rgba(0, 0, 0, 0.7);
-}
-* {
-        box-sizing: border-box;
-        -webkit-tap-highlight-color: transparent;
-        user-select: none;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Hub GRAM</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #070913;
+            --card-bg: rgba(18, 24, 41, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-blue: #38bdf8;
+            --accent-green: #10b981;
+            --accent-gold: #fbbf24;
+            --text-main: #f8fafc;
+            --text-sec: #94a3b8;
+        }
 
-    input::-webkit-outer-spin-button,
-    input::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
-    input[type=number] {
-        -moz-appearance: textfield;
-    }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+        
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 40%);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden; 
+        }
 
-    body {
-        background-color: var(--bg-color);
-        background-image: 
-            radial-gradient(circle at 15% 10%, rgba(245, 158, 11, 0.045) 0%, transparent 45%),
-            radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.04) 0%, transparent 45%),
-            linear-gradient(180deg, #0b0e14 0%, #111622 100%);
-        color: var(--text-main);
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-        margin: 0;
-        padding: 12px 14px 0 14px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: space-between;
-        height: 100vh;
-        height: 100dvh;
-        overflow: hidden;
-        -webkit-font-smoothing: antialiased;
-    }
+        #toast-container {
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 90%;
+            max-width: 380px;
+            pointer-events: none;
+        }
+        .toast-msg {
+            background: rgba(239, 68, 68, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: auto;
+        }
+        .toast-msg.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast-msg.success {
+            background: rgba(16, 185, 129, 0.85);
+        }
 
-    /* Уведомления (Тосты) */
-    #toast-container {
-        position: fixed;
-        top: 16px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        width: 90%;
-        max-width: 380px;
-        pointer-events: none;
-    }
-    .toast-msg {
-        background: rgba(28, 18, 24, 0.88);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid rgba(239, 68, 68, 0.35);
-        color: var(--text-main);
-        padding: 13px 18px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 0.1px;
-        text-align: center;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65);
-        opacity: 0;
-        transform: translateY(-20px) scale(0.96);
-        transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        pointer-events: auto;
-    }
-    .toast-msg.show {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-    .toast-msg.success {
-        background: rgba(14, 31, 28, 0.9);
-        border-color: rgba(16, 185, 129, 0.4);
-        color: #34d399;
-    }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+            flex-shrink: 0;
+            margin-bottom: 8px;
+        }
+        .profile-badge {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 30px;
+            padding: 4px 12px 4px 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+        .profile-avatar {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; color: #fff; font-weight: 700;
+        }
+        .stars-badge {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 30px;
+            padding: 6px 14px;
+            display: flex; align-items: center; gap: 6px;
+            font-weight: 700; font-size: 14px;
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);
+        }
+        .stars-badge span { color: var(--accent-blue); }
+        .plus-btn {
+            background: var(--accent-blue); color: #000;
+            border-radius: 50%; width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 900; cursor: pointer;
+            margin-left: 2px; transition: transform 0.1s;
+        }
+        .plus-btn:active { transform: scale(0.9); }
 
-    /* Верхняя панель (Top Bar) — Парящие матовые капсулы */
-    .top-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        max-width: 420px;
-        flex-shrink: 0;
-        margin-bottom: 10px;
-        z-index: 10;
-    }
-    .profile-badge {
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--border-color);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        border-radius: 30px;
-        padding: 5px 14px 5px 5px;
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        font-size: 13px;
-        font-weight: 600;
-        color: #e2e8f0;
-        transition: transform 0.1s;
-    }
-    .profile-avatar {
-        width: 32px;
-        height: 32px;
-        background: linear-gradient(135deg, #273248, #161c28);
-        border: 1px solid rgba(251, 191, 36, 0.3);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        color: var(--accent-gold);
-        font-weight: 800;
-        box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
-    }
-    .stars-badge {
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid rgba(245, 158, 11, 0.22);
-        border-radius: 30px;
-        padding: 6px 8px 6px 14px;
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        font-weight: 700;
-        font-size: 13px;
-        color: var(--text-sec);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    }
-    .stars-badge span {
-        color: var(--accent-gold);
-        font-size: 15px;
-        font-weight: 800;
-        letter-spacing: -0.3px;
-    }
-    .plus-btn {
-        background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-matte));
-        color: #0b0e14;
-        border-radius: 50%;
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 16px;
-        font-weight: 900;
-        cursor: pointer;
-        margin-left: 2px;
-        box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35);
-        transition: transform 0.1s;
-    }
-    .plus-btn:active {
-        transform: scale(0.92);
-    }
+        .screen { 
+            width: 100%; max-width: 420px; 
+            flex-grow: 1; display: none; 
+            flex-direction: column; 
+            overflow-y: auto; 
+            padding-bottom: 10px;
+            scrollbar-width: none;
+        }
+        .screen::-webkit-scrollbar { display: none; }
+        .screen.active { display: flex !important; }
 
-    /* Контейнеры экранов */
-    .screen {
-        width: 100%;
-        max-width: 420px;
-        flex-grow: 1;
-        display: none;
-        flex-direction: column;
-        overflow-y: auto;
-        padding-bottom: 12px;
-        scrollbar-width: none;
-    }
-    .screen::-webkit-scrollbar {
-        display: none;
-    }
-    .screen.active {
-        display: flex;
-    }
+        .menu-title { 
+            font-size: 24px; font-weight: 800; 
+            margin: 4px 0 14px 4px; 
+            letter-spacing: -0.5px;
+        }
 
-    .menu-title {
-        font-size: 24px;
-        font-weight: 800;
-        margin: 2px 0 12px 4px;
-        letter-spacing: -0.6px;
-        color: var(--text-main);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
+        .card-banner {
+            border-radius: 24px; padding: 20px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 12px; cursor: pointer; position: relative; overflow: hidden; 
+            flex-shrink: 0; backdrop-filter: blur(10px);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card-banner:active { transform: scale(0.98); }
+        .card-banner.arena { 
+            background: linear-gradient(135deg, rgba(13, 148, 136, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%); 
+            border: 1px solid rgba(20, 184, 166, 0.4); 
+            box-shadow: 0 8px 30px rgba(13, 148, 136, 0.15);
+        }
 
-    /* Главное меню: Витрины игр */
-    .card-banner {
-        border-radius: var(--radius-lg);
-        padding: 20px 22px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-        cursor: pointer;
-        position: relative;
-        overflow: hidden;
-        flex-shrink: 0;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        transition: transform 0.1s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .card-banner:active {
-        transform: scale(0.97);
-    }
+        .games-row-2, .games-row-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
 
-    .card-banner.upgrade-ice {
-        background: 
-            radial-gradient(circle at 92% 20%, rgba(245, 158, 11, 0.2) 0%, transparent 55%),
-            linear-gradient(135deg, rgba(30, 36, 48, 0.9) 0%, rgba(18, 23, 33, 0.96) 100%) !important;
-        border: 1px solid rgba(245, 158, 11, 0.28) !important;
-        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(251, 191, 36, 0.12) !important;
-    }
+        .card-box {
+            border-radius: 24px; padding: 16px; 
+            display: flex; flex-direction: column; justify-content: space-between; 
+            cursor: pointer; min-height: 145px; position: relative; overflow: hidden;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card-box:active { transform: scale(0.96); }
+        
+        .card-box.escape { 
+            background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 90%); 
+            border: 1.5px solid #3b82f6; 
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+        }
+        .card-box.mines { 
+            background: linear-gradient(135deg, #581c87 0%, #0f172a 90%); 
+            border: 1.5px solid #a855f7; 
+            box-shadow: 0 8px 25px rgba(168, 85, 247, 0.15);
+        }
+        .card-box.upgrade { 
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); 
+            border: 1px solid rgba(16, 185, 129, 0.35); 
+        }
+        .card-box.slots { 
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); 
+            border: 1px solid rgba(239, 68, 68, 0.35); 
+        }
 
-    .card-banner.arena {
-        background: 
-            radial-gradient(circle at 92% 20%, rgba(16, 185, 129, 0.18) 0%, transparent 55%),
-            linear-gradient(135deg, rgba(24, 34, 46, 0.9) 0%, rgba(16, 21, 31, 0.96) 100%);
-        border: 1px solid rgba(16, 185, 129, 0.25);
-    }
+        .card-content { position: relative; z-index: 2; width: 100%; }
+        .card-content h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
+        .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
+        .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 14px; display: inline-block; }
+        
+        .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
+        .escape-canvas-wrap { position: relative; width: 100%; max-width: 320px; height: 180px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+        #escapeCanvas { width: 300px; height: 300px; }
+        #arenaCanvas { width: 100%; height: 100%; border-radius: 16px; background: #0b1120; border: 1.5px solid rgba(56, 189, 248, 0.3); box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
+        
+        .arena-players-list {
+            display: flex; flex-direction: column; gap: 8px;
+            width: 100%; margin: 10px 0; max-height: 140px; overflow-y: auto;
+        }
+        .arena-player-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 18px; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+        .arena-player-left { display: flex; align-items: center; gap: 10px; }
+        .arena-player-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 800; color: #fff;
+        }
+        .arena-player-info h4 { margin: 0 0 2px 0; font-size: 13px; font-weight: 700; color: #f8fafc; }
+        .arena-player-info p { margin: 0; font-size: 11px; color: var(--text-sec); }
+        .arena-player-right { text-align: right; }
+        .arena-player-chance { font-size: 13px; font-weight: 800; color: #f8fafc; margin: 0 0 2px 0; }
+        .arena-player-bet { font-size: 11px; font-weight: 700; color: var(--accent-gold); margin: 0; text-align: right; }
 
-    .games-row-2,
-    .games-row-bottom {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-bottom: 12px;
-        flex-shrink: 0;
-    }
+        #arenaWinModal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(7, 9, 19, 0.85); backdrop-filter: blur(12px);
+            z-index: 2000; justify-content: center; align-items: center; padding: 20px;
+        }
+        .win-modal-content {
+            background: linear-gradient(135deg, #121a29 0%, #0b1120 100%);
+            border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 28px;
+            padding: 24px 20px; width: 100%; max-width: 340px;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+        }
+        .win-modal-badge {
+            background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px; padding: 8px 18px; font-size: 14px; font-weight: 700;
+            color: #f8fafc; margin-bottom: 20px;
+        }
+        .win-modal-card {
+            background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color);
+            border-radius: 20px; width: 100%; padding: 20px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 24px;
+        }
+        .win-modal-amount { font-size: 28px; font-weight: 900; color: #f8fafc; margin: 0; }
+        .win-modal-close-btn {
+            background: linear-gradient(135deg, #2dd4bf, #0d9488); color: #070913;
+            border: none; width: 100%; padding: 14px; border-radius: 18px;
+            font-size: 15px; font-weight: 800; cursor: pointer; text-align: center;
+        }
 
-    .card-box {
-        border-radius: var(--radius-lg);
-        padding: 18px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        cursor: pointer;
-        min-height: 142px;
-        position: relative;
-        overflow: hidden;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        transition: transform 0.1s ease, border-color 0.2s ease;
-    }
-    .card-box:active {
-        transform: scale(0.97);
-    }
+        .escape-outcomes { display: flex; justify-content: space-between; width: 100%; max-width: 300px; margin: 0 auto 8px auto; padding: 0 10px; font-size: 13px; font-weight: 700; color: #64748b; }
+        .escape-status-bar { width: 100%; height: 8px; border-radius: 4px; display: flex; overflow: hidden; margin-bottom: 12px; background: #1e293b; }
+        .status-green { background: var(--accent-green); flex: 1; }
+        .status-red { background: #ef4444; flex: 1; }
 
-    .card-box.escape {
-        background: 
-            radial-gradient(circle at 90% 10%, rgba(251, 191, 36, 0.14) 0%, transparent 60%),
-            linear-gradient(145deg, #1a2232 0%, #121722 100%);
-        border: 1px solid rgba(255, 255, 255, 0.09);
-    }
-    .card-box.mines {
-        background: 
-            radial-gradient(circle at 90% 10%, rgba(16, 185, 129, 0.15) 0%, transparent 60%),
-            linear-gradient(145deg, #18232e 0%, #111722 100%);
-        border: 1px solid rgba(16, 185, 129, 0.2);
-    }
-    .card-box.upgrade {
-        background: linear-gradient(145deg, rgba(22, 28, 40, 0.72) 0%, rgba(15, 19, 28, 0.85) 100%);
-        border: 1px solid var(--border-color);
-    }
-    .card-box.slots {
-        background: linear-gradient(145deg, rgba(22, 28, 40, 0.72) 0%, rgba(15, 19, 28, 0.85) 100%);
-        border: 1px solid var(--border-color);
-    }
+        .control-panel { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 10px; margin: 0 auto; }
+        .presets-row { display: flex; gap: 6px; justify-content: center; }
+        .preset-btn { 
+            background: var(--card-bg); border: 1px solid var(--border-color); 
+            color: #cbd5e1; padding: 10px; border-radius: 14px; 
+            font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; 
+        }
+        .actions-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
+        .pill-box { 
+            background: var(--card-bg); border: 1px solid var(--border-color); 
+            border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; 
+            gap: 6px; font-size: 12px; font-weight: 700; flex: 1; justify-content: center; color: var(--text-sec); 
+        }
+        .pill-box input { background: transparent; border: none; color: #fff; font-size: 15px; font-weight: 800; width: 70px; text-align: center; outline: none; }
 
-    .card-content {
-        position: relative;
-        z-index: 2;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        justify-content: space-between;
-    }
-    .card-content h3 {
-        margin: 0 0 5px 0;
-        font-size: 16px;
-        font-weight: 800;
-        color: var(--text-main);
-        letter-spacing: -0.3px;
-    }
-    .card-content p {
-        margin: 0;
-        font-size: 12px;
-        color: var(--text-sec);
-        line-height: 1.35;
-        font-weight: 500;
-    }
-    .card-link {
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--accent-gold);
-        margin-top: 14px;
-        display: inline-flex;
-        align-items: center;
-        align-self: flex-start;
-        background: rgba(251, 191, 36, 0.1);
-        border: 1px solid rgba(251, 191, 36, 0.22);
-        padding: 5px 12px;
-        border-radius: 20px;
-        letter-spacing: 0.2px;
-    }
-    .card-banner.arena .card-link,
-    .card-box.mines .card-link {
-        color: #34d399;
-        background: rgba(16, 185, 129, 0.1);
-        border-color: rgba(16, 185, 129, 0.24);
-    }
-    .card-box.upgrade .card-link,
-    .card-box.slots .card-link {
-        color: var(--text-sec);
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(255, 255, 255, 0.07);
-    }
+        .currency-tabs { display: flex; background: var(--card-bg); border-radius: 16px; padding: 3px; gap: 3px; border: 1px solid var(--border-color); }
+        .curr-tab { flex: 1; background: transparent; border: none; color: var(--text-sec); padding: 6px; font-size: 12px; font-weight: 700; border-radius: 13px; cursor: pointer; text-align: center; }
+        .curr-tab.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
 
-    /* Игровые контейнеры и Холсты */
-    .escape-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
-        position: relative;
-    }
-    .escape-canvas-wrap {
-        position: relative;
-        width: 100%;
-        max-width: 340px;
-        height: 185px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    #escapeCanvas {
-        width: 300px;
-        height: 300px;
-        filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.5));
-    }
+        .main-action-btn { 
+            background: linear-gradient(135deg, #10b981, #059669); color: white; 
+            border: none; width: 100%; padding: 14px; border-radius: 18px; 
+            font-size: 15px; font-weight: 800; cursor: pointer; text-align: center; 
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+        }
+        .back-btn { 
+            background: var(--card-bg); color: #cbd5e1; border: 1px solid var(--border-color); 
+            padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; 
+            cursor: pointer; align-self: flex-start; margin-bottom: 6px; 
+        }
 
-    /* Ice Upgrade & Arena: Матовый люкс и слайдеры */
-    #upgradeCanvasWrap {
-        background: radial-gradient(circle at center, #141b29 0%, #0b0e14 100%) !important;
-        border-radius: 28px !important;
-        border: 1.5px solid rgba(245, 158, 11, 0.35) !important;
-        box-shadow: 0 14px 35px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-        overflow: hidden !important;
-    }
+        .grid-container { width: 100%; max-width: 300px; margin: 0 auto 6px auto; }
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
+        .cell { 
+            aspect-ratio: 1; background: var(--card-bg); border: 1px solid var(--border-color); 
+            border-radius: 14px; display: flex; align-items: center; justify-content: center; 
+            font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; 
+        }
+        .cell.safe { background: rgba(6, 78, 59, 0.8); border-color: var(--accent-green); color: var(--accent-green); }
+        .cell.mine { background: rgba(127, 29, 29, 0.9); border-color: #ef4444; color: #ef4444; }
+        
+        .mines-info-bar { 
+            display: flex; justify-content: space-between; width: 100%; max-width: 300px; 
+            margin: 0 auto 8px auto; background: var(--card-bg); border: 1px solid var(--border-color); 
+            padding: 8px 14px; border-radius: 14px; font-size: 12px; font-weight: 700; 
+        }
+        .mines-info-bar span { color: var(--accent-blue); }
 
-    #upgradeChanceRange {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 100%;
-        height: 10px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #991b1b 0%, #d97706 50%, #059669 100%);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6);
-        outline: none;
-        margin: 8px 0;
-    }
-    #upgradeChanceRange::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background: radial-gradient(circle at 35% 35%, #ffffff 0%, #cbd5e1 70%, #94a3b8 100%);
-        border: 3px solid #0b0e14;
-        box-shadow: 0 0 14px rgba(251, 191, 36, 0.5), 0 4px 10px rgba(0, 0, 0, 0.7);
-        cursor: pointer;
-        transition: transform 0.1s;
-    }
-    #upgradeChanceRange::-webkit-slider-thumb:active {
-        transform: scale(1.12);
-    }
+        .profile-header-card { 
+            background: var(--card-bg); border: 1px solid var(--border-color); 
+            border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; 
+        }
+        .profile-avatar-large { 
+            width: 50px; height: 50px; border-radius: 50%; 
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8); 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 18px; font-weight: 800; color: #fff; 
+        }
+        .profile-user-info h3 { margin: 0 0 2px 0; font-size: 16px; font-weight: 700; }
+        .profile-user-info p { margin: 0; font-size: 12px; color: var(--text-sec); }
 
-    /* Ice Arena: Список игроков */
-    .arena-players-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        width: 100%;
-        margin: 10px 0;
-        max-height: 125px;
-        overflow-y: auto;
-        scrollbar-width: none;
-    }
-    .arena-players-list::-webkit-scrollbar {
-        display: none;
-    }
-    .arena-player-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: 9px 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-    }
-    .arena-player-left {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .arena-player-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 13px;
-        font-weight: 800;
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-    }
-    .arena-player-info h4 {
-        margin: 0 0 2px 0;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--text-main);
-    }
-    .arena-player-info p {
-        margin: 0;
-        font-size: 11px;
-        color: var(--text-sec);
-    }
-    .arena-player-right {
-        text-align: right;
-        background: rgba(11, 14, 20, 0.5);
-        border: 1px solid rgba(251, 191, 36, 0.18);
-        padding: 4px 10px;
-        border-radius: 12px;
-    }
-    .arena-player-chance {
-        font-size: 12px;
-        font-weight: 800;
-        color: var(--text-main);
-        margin: 0 0 1px 0;
-    }
-    .arena-player-bet {
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--accent-gold);
-        margin: 0;
-        text-align: right;
-    }
+        .ref-card, .settings-card { 
+            background: var(--card-bg); border: 1px solid var(--border-color); 
+            border-radius: 20px; padding: 16px; margin-bottom: 12px; 
+        }
+        .ref-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .ref-subtitle { font-size: 12px; color: var(--text-sec); margin-bottom: 12px; }
+        
+        .ref-link-box { 
+            background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); 
+            border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; 
+        }
+        .ref-link-box input { background: transparent; border: none; color: var(--text-sec); font-size: 11px; width: 100%; outline: none; }
+        .ref-share-btn { 
+            background: var(--accent-blue); color: #000; border-radius: 50%; 
+            width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; 
+            font-size: 14px; font-weight: bold; cursor: pointer; border: none; 
+        }
+        
+        .ref-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .ref-stat-box h4 { margin: 0 0 2px 0; font-size: 18px; font-weight: 800; }
+        .ref-stat-box p { margin: 0; font-size: 11px; color: var(--text-sec); }
+        .ref-claim-btn { 
+            background: #14b8a6; color: #060913; border: none; width: 100%; 
+            padding: 12px; border-radius: 14px; font-size: 14px; font-weight: 800; cursor: pointer; text-align: center; 
+        }
 
-    /* Модальное окно победы в Арене */
-    #arenaWinModal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(7, 9, 14, 0.82);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        z-index: 2000;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-    }
-    .win-modal-content {
-        background: linear-gradient(145deg, #182030 0%, #101520 100%);
-        border: 1px solid rgba(251, 191, 36, 0.28);
-        border-radius: 28px;
-        padding: 26px 22px;
-        width: 100%;
-        max-width: 340px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        box-shadow: var(--shadow-deep), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-    .win-modal-badge {
-        background: rgba(251, 191, 36, 0.1);
-        border: 1px solid rgba(251, 191, 36, 0.25);
-        border-radius: 30px;
-        padding: 8px 18px;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--accent-gold);
-        margin-bottom: 18px;
-    }
-    .win-modal-card {
-        background: rgba(9, 12, 18, 0.65);
-        border: 1px solid var(--border-color);
-        border-radius: 22px;
-        width: 100%;
-        padding: 22px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 22px;
-        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
-    }
-    .win-modal-amount {
-        font-size: 30px;
-        font-weight: 900;
-        color: var(--accent-green);
-        margin: 0;
-        text-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
-    }
-    .win-modal-close-btn {
-        background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-        color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        width: 100%;
-        padding: 15px;
-        border-radius: 20px;
-        font-size: 15px;
-        font-weight: 800;
-        cursor: pointer;
-        text-align: center;
-        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
-        transition: transform 0.1s;
-    }
-    .win-modal-close-btn:active {
-        transform: scale(0.97);
-    }
+        .cashback-top h4 { margin: 0; font-size: 15px; font-weight: 700; }
+        .cashback-top p { margin: 2px 0 0 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
+        .cashback-amount { font-size: 13px; font-weight: 700; margin: 10px 0; }
+        .cashback-amount span { display: block; font-size: 11px; color: var(--text-sec); font-weight: normal; }
+        .cashback-btn { 
+            background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); 
+            color: var(--accent-gold); width: 100%; padding: 10px; border-radius: 14px; 
+            font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; 
+        }
+        
+        .settings-item-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); 
+            padding: 10px 14px; border-radius: 14px; margin-top: 8px; cursor: pointer; font-size: 13px; font-weight: 600; 
+        }
+        
+        .switch { position: relative; display: inline-block; width: 42px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-green); }
+        input:checked + .slider:before { transform: translateX(18px); }
 
-    /* Escape: Прогресс и статусы */
-    .escape-outcomes {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-        max-width: 320px;
-        margin: 0 auto 8px auto;
-        padding: 0 6px;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.5px;
-        color: var(--text-sec);
-    }
-    .escape-status-bar {
-        width: 100%;
-        max-width: 320px;
-        height: 8px;
-        border-radius: 99px;
-        display: flex;
-        overflow: hidden;
-        margin-bottom: 14px;
-        background: #161c28;
-        border: 1px solid var(--border-color);
-        padding: 1px;
-    }
-    .status-green {
-        background: linear-gradient(90deg, #059669, #10b981);
-        flex: 1;
-        border-radius: 99px 0 0 99px;
-    }
-    .status-red {
-        background: linear-gradient(90deg, #dc2626, #991b1b);
-        flex: 1;
-        border-radius: 0 99px 99px 0;
-    }
-
-    /* Панель управления ставками */
-    .control-panel {
-        width: 100%;
-        max-width: 400px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        margin: 0 auto;
-    }
-    .presets-row {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-    }
-    .preset-btn {
-        background: var(--card-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid var(--border-color);
-        color: #e2e8f0;
-        padding: 11px 10px;
-        border-radius: 18px;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        flex: 1;
-        text-align: center;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        transition: transform 0.1s, border-color 0.15s, background 0.15s;
-    }
-    .preset-btn:active {
-        transform: scale(0.97);
-        border-color: rgba(251, 191, 36, 0.35);
-        background: rgba(30, 38, 54, 0.9);
-    }
-    .actions-row {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-        align-items: center;
-    }
-    .pill-box {
-        background: rgba(15, 20, 30, 0.85);
-        border: 1px solid var(--border-color);
-        border-radius: 20px;
-        padding: 11px 14px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.4px;
-        flex: 1;
-        justify-content: space-between;
-        color: var(--text-sec);
-        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
-    }
-    .pill-box input {
-        background: transparent;
-        border: none;
-        color: var(--accent-gold);
-        font-size: 16px;
-        font-weight: 800;
-        width: 80px;
-        text-align: center;
-        outline: none;
-    }
-
-    .currency-tabs {
-        display: flex;
-        background: var(--card-bg);
-        border-radius: 18px;
-        padding: 4px;
-        gap: 4px;
-        border: 1px solid var(--border-color);
-    }
-    .curr-tab {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: var(--text-sec);
-        padding: 7px;
-        font-size: 12px;
-        font-weight: 700;
-        border-radius: 14px;
-        cursor: pointer;
-        text-align: center;
-        transition: transform 0.1s;
-    }
-    .curr-tab.active {
-        background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.08));
-        border: 1px solid rgba(245, 158, 11, 0.3);
-        color: var(--accent-gold);
-    }
-
-    /* Главные кнопки действий */
-    .main-action-btn {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        width: 100%;
-        padding: 15px;
-        border-radius: 22px;
-        font-size: 15px;
-        font-weight: 800;
-        letter-spacing: 0.2px;
-        cursor: pointer;
-        text-align: center;
-        box-shadow: 0 10px 28px rgba(16, 185, 129, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-        transition: transform 0.1s ease, filter 0.15s ease;
-    }
-    .main-action-btn:active {
-        transform: scale(0.97);
-        filter: brightness(0.95);
-    }
-
-    .back-btn {
-        background: var(--card-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        color: #e2e8f0;
-        border: 1px solid var(--border-color);
-        padding: 7px 14px;
-        border-radius: 16px;
-        font-size: 12px;
-        font-weight: 700;
-        cursor: pointer;
-        align-self: flex-start;
-        margin-bottom: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        transition: transform 0.1s;
-    }
-    .back-btn:active {
-        transform: scale(0.97);
-    }
-
-    /* Экран «Мины» */
-    .grid-container {
-        width: 100%;
-        max-width: 310px;
-        margin: 0 auto 10px auto;
-    }
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 7px;
-        width: 100%;
-    }
-    .cell {
-        aspect-ratio: 1;
-        background: linear-gradient(145deg, rgba(28, 36, 52, 0.9), rgba(18, 24, 36, 0.95));
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 15px;
-        font-weight: 800;
-        color: var(--text-muted);
-        cursor: pointer;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        transition: transform 0.1s ease, border-color 0.2s ease, background 0.2s ease;
-    }
-    .cell:active {
-        transform: scale(0.94);
-    }
-    .cell.safe {
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(5, 150, 105, 0.48));
-        border-color: rgba(16, 185, 129, 0.65);
-        color: #34d399;
-        box-shadow: 0 0 16px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }
-    .cell.mine {
-        background: linear-gradient(135deg, rgba(220, 38, 38, 0.32), rgba(153, 27, 27, 0.55));
-        border-color: rgba(239, 68, 68, 0.7);
-        color: #f87171;
-        box-shadow: 0 0 16px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }
-
-    .mines-info-bar {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-        max-width: 310px;
-        margin: 0 auto 10px auto;
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--border-color);
-        padding: 10px 16px;
-        border-radius: 18px;
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--text-sec);
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
-    }
-    .mines-info-bar span {
-        color: var(--accent-gold);
-        font-weight: 800;
-    }
-
-    /* Экран «Профиль» */
-    .profile-header-card {
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-lg);
-        padding: 16px 18px;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        margin-bottom: 12px;
-        box-shadow: var(--shadow-soft);
-    }
-    .profile-avatar-large {
-        width: 52px;
-        height: 52px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #273248, #161c28);
-        border: 1.5px solid rgba(251, 191, 36, 0.35);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        font-weight: 800;
-        color: var(--accent-gold);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    }
-    .profile-user-info h3 {
-        margin: 0 0 3px 0;
-        font-size: 17px;
-        font-weight: 800;
-        color: var(--text-main);
-    }
-    .profile-user-info p {
-        margin: 0;
-        font-size: 12px;
-        color: var(--text-sec);
-    }
-
-    .ref-card,
-    .settings-card {
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-lg);
-        padding: 18px;
-        margin-bottom: 12px;
-        box-shadow: var(--shadow-soft);
-    }
-    .ref-title {
-        font-size: 15px;
-        font-weight: 800;
-        margin-bottom: 4px;
-        color: var(--text-main);
-    }
-    .ref-subtitle {
-        font-size: 12px;
-        color: var(--text-sec);
-        margin-bottom: 12px;
-    }
-
-    .ref-link-box {
-        background: rgba(11, 14, 20, 0.65);
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        padding: 8px 10px 8px 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-    .ref-link-box input {
-        background: transparent;
-        border: none;
-        color: var(--text-sec);
-        font-size: 12px;
-        font-weight: 500;
-        width: 100%;
-        outline: none;
-    }
-    .ref-share-btn {
-        background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-matte));
-        color: #0b0e14;
-        border-radius: 12px;
-        width: 32px;
-        height: 32px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        font-weight: 900;
-        cursor: pointer;
-        border: none;
-        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
-        transition: transform 0.1s;
-    }
-    .ref-share-btn:active {
-        transform: scale(0.94);
-    }
-
-    .ref-stats-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-    .ref-stat-box {
-        background: rgba(11, 14, 20, 0.45);
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        padding: 10px 12px;
-    }
-    .ref-stat-box h4 {
-        margin: 0 0 2px 0;
-        font-size: 18px;
-        font-weight: 800;
-        color: var(--accent-gold);
-    }
-    .ref-stat-box p {
-        margin: 0;
-        font-size: 11px;
-        color: var(--text-sec);
-    }
-    .ref-claim-btn {
-        background: linear-gradient(135deg, var(--accent-green), var(--accent-green-dark));
-        color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        width: 100%;
-        padding: 13px;
-        border-radius: 18px;
-        font-size: 14px;
-        font-weight: 800;
-        cursor: pointer;
-        text-align: center;
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
-        transition: transform 0.1s;
-    }
-    .ref-claim-btn:active {
-        transform: scale(0.97);
-    }
-
-    .cashback-top h4 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 800;
-    }
-    .cashback-top p {
-        margin: 3px 0 0 0;
-        font-size: 12px;
-        color: var(--text-sec);
-        line-height: 1.35;
-    }
-    .cashback-amount {
-        font-size: 14px;
-        font-weight: 800;
-        color: var(--accent-gold);
-        margin: 12px 0;
-    }
-    .cashback-amount span {
-        display: block;
-        font-size: 12px;
-        color: var(--text-sec);
-        font-weight: 600;
-    }
-    .cashback-btn {
-        background: rgba(251, 191, 36, 0.12);
-        border: 1px solid rgba(251, 191, 36, 0.3);
-        color: var(--accent-gold);
-        width: 100%;
-        padding: 12px;
-        border-radius: 18px;
-        font-size: 13px;
-        font-weight: 800;
-        cursor: pointer;
-        text-align: center;
-        transition: transform 0.1s;
-    }
-    .cashback-btn:active {
-        transform: scale(0.97);
-    }
-
-    .settings-item-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: rgba(11, 14, 20, 0.5);
-        border: 1px solid var(--border-color);
-        padding: 12px 15px;
-        border-radius: 16px;
-        margin-top: 8px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        transition: transform 0.1s;
-    }
-    .settings-item-row:active {
-        transform: scale(0.98);
-    }
-
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 44px;
-        height: 24px;
-    }
-    .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #263042;
-        transition: 0.25s;
-        border-radius: 24px;
-        border: 1px solid var(--border-color);
-    }
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 18px;
-        width: 18px;
-        left: 2px;
-        bottom: 2px;
-        background-color: #f8fafc;
-        transition: 0.25s;
-        border-radius: 50%;
-    }
-    input:checked + .slider {
-        background-color: var(--accent-green);
-    }
-    input:checked + .slider:before {
-        transform: translateX(20px);
-    }
-
-    /* Парящее нижнее меню (Floating Glass Dock) */
-    .nav-bar {
-        background: rgba(18, 23, 34, 0.82);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 30px;
-        width: calc(100% - 16px);
-        max-width: 400px;
-        display: flex;
-        justify-content: space-around;
-        padding: 6px 8px;
-        margin: 4px 16px 12px 16px;
-        flex-shrink: 0;
-        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        z-index: 20;
-    }
-    .nav-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 4px;
-        background: transparent;
-        border: 1px solid transparent;
-        color: var(--text-sec);
-        font-size: 10px;
-        font-weight: 700;
-        cursor: pointer;
-        padding: 7px 12px;
-        border-radius: 22px;
-        transition: color 0.2s, background 0.2s, transform 0.1s, border-color 0.2s;
-    }
-    .nav-item:active {
-        transform: scale(0.95);
-    }
-    .nav-item svg {
-        width: 20px;
-        height: 20px;
-        fill: currentColor;
-        transition: filter 0.2s;
-    }
-    .nav-item.active {
-        color: var(--accent-gold);
-        background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(16, 185, 129, 0.08));
-        border-color: rgba(245, 158, 11, 0.22);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-    }
-    .nav-item.active svg {
-        filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.5));
-    }
-
-    /* Модальное окно депозита */
-    #depositModal {
-        backdrop-filter: blur(20px) !important;
-        -webkit-backdrop-filter: blur(20px) !important;
-        background: rgba(7, 9, 14, 0.82) !important;
-    }
-    .deposit-modal-box {
-        background: linear-gradient(145deg, #182030 0%, #101520 100%);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 28px;
-        padding: 24px 20px;
-        width: 100%;
-        max-width: 360px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        text-align: center;
-        box-shadow: var(--shadow-deep), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    }
-</style>
+        .nav-bar { 
+            background: rgba(13, 18, 32, 0.85); backdrop-filter: blur(16px); 
+            border: 1px solid var(--border-color); border-radius: 24px; 
+            width: 100%; max-width: 420px; display: flex; justify-content: space-around; 
+            padding: 6px; margin-top: 6px; flex-shrink: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .nav-item { 
+            display: flex; flex-direction: column; align-items: center; gap: 3px; 
+            background: transparent; border: none; color: var(--text-sec); 
+            font-size: 10px; font-weight: 600; cursor: pointer; padding: 6px 10px; 
+            border-radius: 16px; transition: color 0.2s, background 0.2s;
+        }
+        .nav-item svg { width: 20px; height: 20px; fill: currentColor; }
+        .nav-item.active { color: var(--accent-blue); background: rgba(56, 189, 248, 0.1); }
+    </style>
 </head>
 <body>
-<div id="toast-container"></div>
 
-<div class="top-bar">
-    <div class="profile-badge">
-        <div class="profile-avatar" id="avatar-initials">US</div>
-        <span id="username">Игрок</span>
+    <div id="toast-container"></div>
+
+    <div class="top-bar">
+        <div class="profile-badge">
+            <div class="profile-avatar" id="avatar-initials">US</div>
+            <span id="username">Игрок</span>
+        </div>
+        <div class="stars-badge">
+            <span id="balance">0.00</span> GRAM
+            <div class="plus-btn" onclick="openDepositModal()">+</div>
+        </div>
     </div>
-    <div class="stars-badge">
-        <span id="balance">0.00</span> GRAM
-        <div class="plus-btn" onclick="openDepositModal()">+</div>
-    </div>
-</div>
 
-<!-- ЭКРАН 1: ИГРЫ -->
-<div id="screen-games" class="screen active">
-    <div class="menu-title">Arcade Hub</div>
+    <!-- ЭКРАН 1: ИГРЫ -->
+    <div id="screen-games" class="screen active">
+        <div class="menu-title">Arcade Hub</div>
 
-    <div class="card-banner upgrade-ice" onclick="openGame('iceUpgrade')">
-        <div class="card-content">
-            <div>
+        <div class="card-banner upgrade-ice" onclick="openGame('iceUpgrade')" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(234, 179, 8, 0.4); box-shadow: 0 8px 30px rgba(234, 179, 8, 0.15); margin-bottom: 12px;">
+            <div class="card-content">
                 <h3>ICE UPGRADE</h3>
                 <p>Выбирай шанс, крути шайбу и умножай GRAM</p>
+                <span class="card-link">Играть &rarr;</span>
             </div>
-            <span class="card-link">Играть &rarr;</span>
         </div>
-    </div>
 
-    <div class="card-banner arena" onclick="openGame('iceArena')">
-        <div class="card-content">
-            <div>
+        <div class="card-banner arena" onclick="openGame('iceArena')">
+            <div class="card-content">
                 <h3>ICE ARENA</h3>
                 <p>Ставь GRAM, следи за шайбой и забирай общий банк</p>
+                <span class="card-link">Играть &rarr;</span>
             </div>
-            <span class="card-link">Играть &rarr;</span>
         </div>
-    </div>
 
-    <div class="games-row-2">
-        <div class="card-box escape" onclick="openGame('escape')">
-            <div class="card-content">
-                <div>
+        <div class="games-row-2">
+            <div class="card-box escape" onclick="openGame('escape')">
+                <div class="card-content">
                     <h3>ESCAPE</h3>
                     <p>Поймай множитель</p>
+                    <span class="card-link">Играть &rarr;</span>
                 </div>
-                <span class="card-link">Играть &rarr;</span>
             </div>
-        </div>
-        
-        <div class="card-box mines" onclick="openGame('mines')">
-            <div class="card-content">
-                <div>
+            
+            <div class="card-box mines" onclick="openGame('mines')">
+                <div class="card-content">
                     <h3>МИНЫ</h3>
                     <p>Найди кристаллы</p>
+                    <span class="card-link">Играть &rarr;</span>
                 </div>
-                <span class="card-link">Играть &rarr;</span>
             </div>
         </div>
-    </div>
 
-    <div class="games-row-bottom">
-        <div class="card-box upgrade" onclick="showToast('Апгрейд скоро будет доступен!', false)">
-            <div class="card-content">
-                <div>
+        <div class="games-row-bottom">
+            <div class="card-box upgrade" onclick="showToast('Апгрейд скоро будет доступен!', false)">
+                <div class="card-content">
                     <h3>АПГРЕЙД</h3>
                     <p>Улучшай лут</p>
+                    <span class="card-link">Скоро &rarr;</span>
                 </div>
-                <span class="card-link">Скоро &rarr;</span>
             </div>
-        </div>
-        <div class="card-box slots" onclick="showToast('Слоты скоро будут доступны!', false)">
-            <div class="card-content">
-                <div>
+            <div class="card-box slots" onclick="showToast('Слоты скоро будут доступны!', false)">
+                <div class="card-content">
                     <h3>СЛОТЫ</h3>
                     <p>Джекпот</p>
+                    <span class="card-link">Скоро &rarr;</span>
                 </div>
-                <span class="card-link">Скоро &rarr;</span>
             </div>
         </div>
     </div>
-</div>
 
-<!-- ЭКРАН: ICE UPGRADE -->
-<div id="screen-iceUpgrade" class="screen">
-    <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-    <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center; justify-content: center;">ICE UPGRADE</div>
-    
-    <div class="escape-container">
-        <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #0b0e14; border-radius: 28px; border: 1.5px solid rgba(245, 158, 11, 0.35); overflow: hidden !important; position: relative; margin: 0 auto; box-shadow: 0 14px 35px rgba(0,0,0,0.7);">
-            <canvas id="upgradeCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
-        </div>
+    <!-- ЭКРАН: ICE UPGRADE -->
+    <div id="screen-iceUpgrade" class="screen">
+        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
+        <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center;">ICE UPGRADE</div>
         
-        <div style="width: 90vw; max-width: 380px; margin: 12px 0 4px 0;">
-            <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-sec); margin-bottom: 4px;">
-                <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">50</span>%</span>
-                <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.96x</span></span>
+        <div class="escape-container">
+            <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #0b1120; border-radius: 28px; border: 2px solid rgba(234, 179, 8, 0.4); overflow: hidden; position: relative; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.7);">
+                <canvas id="upgradeCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
             </div>
-            <input type="range" id="upgradeChanceRange" min="30" max="75" value="50" step="1" style="width: 100%; cursor: pointer;" oninput="updateUpgradeChance(this.value)">
+            
+            <div style="width: 90vw; max-width: 380px; margin: 12px 0 4px 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-sec); margin-bottom: 4px;">
+                    <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">66</span>%</span>
+                    <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.48x</span></span>
+                </div>
+                <input type="range" id="upgradeChanceRange" min="30" max="75" value="50" step="1" style="width: 100%; cursor: pointer;" oninput="updateUpgradeChance(this.value)">
+            </div>
+        </div>
+
+        <div class="control-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
+            <div class="presets-row">
+                <button class="preset-btn" onclick="multiplyUpgradeBet(0.5)">/2</button>
+                <button class="preset-btn" onclick="multiplyUpgradeBet(2)">x2</button>
+                <button class="preset-btn" onclick="maxUpgradeBet()">Max</button>
+            </div>
+            <div class="actions-row">
+                <div class="pill-box" style="width: 100%;">
+                    <span>СТАВКА</span>
+                    <input type="number" id="upgradeBetInput" value="0.25" min="0.25" max="2.0" step="0.25">
+                    <span>GRAM</span>
+                </div>
+            </div>
+            <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()" style="background: linear-gradient(135deg, #10b981, #059669);">Сделать ставку</button>
         </div>
     </div>
 
-    <div class="control-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
-        <div class="presets-row">
-            <button class="preset-btn" onclick="multiplyUpgradeBet(0.5)">/2</button>
-            <button class="preset-btn" onclick="multiplyUpgradeBet(2)">x2</button>
-            <button class="preset-btn" onclick="maxUpgradeBet()">Max</button>
-        </div>
-        <div class="actions-row">
-            <div class="pill-box" style="width: 100%;">
-                <span>СТАВКА</span>
-                <input type="number" id="upgradeBetInput" value="0.25" min="0.25" max="2.0" step="0.25">
-                <span>GRAM</span>
-            </div>
-        </div>
-        <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()">Сделать ставку</button>
-    </div>
-</div>
-
-<!-- ЭКРАН: ICE ARENA (КВАДРАТНОЕ ПОЛЕ 800x800) -->
-<div id="screen-iceArena" class="screen">
-    <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-    <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center; justify-content: center;">ICE ARENA</div>
-    
-    <div class="escape-container">
-        <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #0b0e14; border-radius: 28px; border: 1.5px solid rgba(16, 185, 129, 0.35); overflow: hidden !important; position: relative; margin: 0 auto; box-shadow: 0 14px 35px rgba(0,0,0,0.7);">
-            <canvas id="arenaCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
-        </div>
+    <!-- ЭКРАН: ICE ARENA -->
+    <div id="screen-iceArena" class="screen">
+        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
+        <div class="menu-title" style="font-size: 18px; margin-bottom: 2px; text-align: center;">ICE ARENA</div>
         
-        <div class="arena-players-list" id="arenaPlayersList"></div>
-        <div id="arenaTimerText" style="font-size: 13px; font-weight: 700; color: var(--accent-gold); margin: 4px 0;">Ожидание игроков...</div>
+        <div class="escape-container">
+            <div class="escape-canvas-wrap" style="width: 100%; height: 180px;">
+                <canvas id="arenaCanvas" width="340" height="180"></canvas>
+            </div>
+            
+            <div class="arena-players-list" id="arenaPlayersList"></div>
+
+            <div id="arenaTimerText" style="font-size: 13px; font-weight: 700; color: var(--accent-blue); margin: 2px 0;">Ожидание игроков...</div>
+        </div>
+
+        <div class="control-panel" style="margin-top: 4px;">
+            <div class="mines-info-bar" style="max-width: 100%;">
+                <div>Банк: <span id="arenaTotalBank">0.00</span> GRAM</div>
+                <div>Комиссия: <span style="color:#ef4444;">25%</span></div>
+            </div>
+            <div class="presets-row">
+                <button class="preset-btn" onclick="setArenaBet(0.25)">0.25</button>
+                <button class="preset-btn" onclick="setArenaBet(1.00)">1.00</button>
+                <button class="preset-btn" onclick="setArenaBet(5.00)">5.00</button>
+                <button class="preset-btn" onclick="setArenaBet(10.00)">10.00</button>
+            </div>
+            <div class="actions-row">
+                <div class="pill-box" style="width: 100%;">
+                    <span>СТАВКА</span>
+                    <input type="number" id="arenaBetInput" value="0.25" min="0.25" step="0.25">
+                    <span>GRAM</span>
+                </div>
+            </div>
+            <button class="main-action-btn" id="arenaActionBtn" onclick="joinArenaGame()">Поставить 0.25 GRAM</button>
+        </div>
     </div>
 
-    <div class="control-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
-        <div class="mines-info-bar" style="max-width: 100%;">
-            <div>Банк: <span id="arenaTotalBank">0.25</span> GRAM</div>
-            <div>Комиссия: <span style="color:#ef4444;">25%</span></div>
+    <div id="arenaWinModal">
+        <div class="win-modal-content">
+            <div class="win-modal-badge" id="winModalBadgeText">@username • 100%</div>
+            <div class="win-modal-card">
+                <div class="win-modal-amount" id="winModalAmountText">+0.00</div>
+            </div>
+            <button class="win-modal-close-btn" onclick="closeArenaWinModal()">Закрыть</button>
         </div>
-        <div class="presets-row">
-            <button class="preset-btn" onclick="setArenaBet(0.25)">0.25</button>
-            <button class="preset-btn" onclick="setArenaBet(1.00)">1.00</button>
-            <button class="preset-btn" onclick="setArenaBet(2.00)">2.00</button>
+    </div>
+
+    <!-- ESCAPE -->
+    <div id="screen-escape" class="screen">
+        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
+        <div class="escape-container">
+            <div class="escape-canvas-wrap"><canvas id="escapeCanvas" width="300" height="300"></canvas></div>
+            <div class="escape-outcomes"><span>WIN</span><span>CRASH</span></div>
+            <div class="escape-status-bar"><div class="status-green"></div><div class="status-red"></div></div>
         </div>
-        <div class="actions-row">
-            <div class="pill-box" style="width: 100%;">
-                <span>СТАВКА</span>
-                <input type="number" id="arenaBetInput" value="0.25" min="0.25" step="0.25">
-                <span>GRAM</span>
+        <div class="control-panel">
+            <div class="currency-tabs">
+                <button class="curr-tab active">БАЛАНС</button>
+            </div>
+            <div class="presets-row">
+                <button class="preset-btn" onclick="multiplyEscapeBet(0.5)">/2</button>
+                <button class="preset-btn" onclick="multiplyEscapeBet(2)">x2</button>
+                <button class="preset-btn" onclick="maxEscapeBet()">Max</button>
+            </div>
+            <div class="actions-row">
+                <div class="pill-box"><input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25"><span>СТАВКА</span></div>
+            </div>
+            <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()">Играть</button>
+        </div>
+    </div>
+
+    <!-- МИНЫ -->
+    <div id="screen-mines" class="screen">
+        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
+        <div class="mines-info-bar">
+            <div>Множитель: <span id="minesMultiplier">1.00x</span></div>
+            <div>Выигрыш: <span id="minesWinAmount">0.00</span></div>
+        </div>
+        <div class="grid-container"><div class="grid" id="grid"></div></div>
+        <div class="control-panel">
+            <div class="presets-row">
+                <button class="preset-btn" onclick="setBetPercent(0.25)">25%</button>
+                <button class="preset-btn" onclick="setBetPercent(0.5)">50%</button>
+                <button class="preset-btn" onclick="setBetPercent(1)">MAX</button>
+                <button class="preset-btn" onclick="multiplyBet(2)">2x</button>
+            </div>
+            <div class="actions-row">
+                <div class="pill-box"><span>СТАВКА</span><input type="number" id="betInput" value="0.25" min="0.25" step="0.25"></div>
+                <div class="pill-box"><span>МИНЫ</span><input type="number" id="minesInput" value="3" min="1" max="24"></div>
+            </div>
+            <button class="main-action-btn" id="actionBtn" onclick="startGame()">Сделать ставку</button>
+        </div>
+    </div>
+
+    <div id="screen-tasks" class="screen"><div class="menu-title">Задания</div><p style="color:var(--text-sec);">Выполняйте задания для получения GRAM.</p></div>
+    <div id="screen-inventory" class="screen"><div class="menu-title">Инвентарь</div><p style="color:var(--text-sec);">Ваши бустеры и кейсы.</p></div>
+    <div id="screen-leaders" class="screen"><div class="menu-title">Лидеры</div><p style="color:var(--text-sec);">Топ игроков по балансу GRAM.</p></div>
+    
+    <!-- ПРОФИЛЬ -->
+    <div id="screen-profile" class="screen">
+        <div class="menu-title">Профиль</div>
+        <div class="profile-header-card">
+            <div class="profile-avatar-large" id="profile-avatar-large">US</div>
+            <div class="profile-user-info">
+                <h3 id="profile-name">Игрок</h3>
+                <p id="profile-username">@username</p>
             </div>
         </div>
-        <button class="main-action-btn" id="arenaActionBtn" onclick="joinArenaGame()">Поставить 0.25 GRAM</button>
-    </div>
-</div>
 
-<!-- МОДАЛЬНОЕ ОКНО ПОБЕДЫ АРЕНЫ -->
-<div id="arenaWinModal">
-    <div class="win-modal-content">
-        <div class="win-modal-badge" id="winModalBadgeText">@username • 100%</div>
-        <div class="win-modal-card">
-            <div class="win-modal-amount" id="winModalAmountText">+0.00</div>
+        <div class="ref-card">
+            <div class="ref-title">Реферальная система</div>
+            <div class="ref-subtitle">Приглашайте друзей и получайте бонус</div>
+            <div class="ref-link-box">
+                <input type="text" id="refLinkInput" readonly value="">
+                <button class="ref-share-btn" onclick="shareRefLink()">&#10148;</button>
+            </div>
+            <div class="ref-stats-row">
+                <div class="ref-stat-box"><h4 id="refCount">0</h4><p>Друзей</p></div>
+                <div class="ref-stat-box"><h4 id="refEarned">0.00</h4><p>Заработано GRAM</p></div>
+            </div>
+            <button class="ref-claim-btn" onclick="claimRefRewards()">Забрать награду</button>
         </div>
-        <button class="win-modal-close-btn" onclick="closeArenaWinModal()">Закрыть</button>
-    </div>
-</div>
 
-<!-- ESCAPE -->
-<div id="screen-escape" class="screen">
-    <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-    <div class="escape-container">
-        <div class="escape-canvas-wrap"><canvas id="escapeCanvas" width="300" height="300"></canvas></div>
-        <div class="escape-outcomes"><span>WIN</span><span>CRASH</span></div>
-        <div class="escape-status-bar"><div class="status-green"></div><div class="status-red"></div></div>
-    </div>
-    <div class="control-panel">
-        <div class="currency-tabs">
-            <button class="curr-tab active">БАЛАНС</button>
-        </div>
-        <div class="presets-row">
-            <button class="preset-btn" onclick="multiplyEscapeBet(0.5)">/2</button>
-            <button class="preset-btn" onclick="multiplyEscapeBet(2)">x2</button>
-            <button class="preset-btn" onclick="maxEscapeBet()">Max</button>
-        </div>
-        <div class="actions-row">
-            <div class="pill-box"><input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25"><span>СТАВКА</span></div>
-        </div>
-        <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()">Играть</button>
-    </div>
-</div>
+        <div class="settings-card">
+            <div class="cashback-top">
+                <div><h4>Кешбек</h4><p>Возврат 15% от проигрышей за неделю.</p></div>
+            </div>
+            <div class="cashback-amount"><span id="cashbackBalance">0.00 GRAM</span> Доступно</div>
+            <button class="cashback-btn" onclick="claimCashback()">Получить <span id="cashbackBtnVal">0.00</span> GRAM</button>
 
-<!-- МИНЫ -->
-<div id="screen-mines" class="screen">
-    <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-    <div class="mines-info-bar">
-        <div>Множитель: <span id="minesMultiplier">1.00x</span></div>
-        <div>Выигрыш: <span id="minesWinAmount">0.00</span></div>
-    </div>
-    <div class="grid-container"><div class="grid" id="grid"></div></div>
-    <div class="control-panel">
-        <div class="presets-row">
-            <button class="preset-btn" onclick="setBetPercent(0.25)">25%</button>
-            <button class="preset-btn" onclick="setBetPercent(0.5)">50%</button>
-            <button class="preset-btn" onclick="setBetPercent(1)">MAX</button>
-            <button class="preset-btn" onclick="multiplyBet(2)">2x</button>
-        </div>
-        <div class="actions-row">
-            <div class="pill-box"><span>СТАВКА</span><input type="number" id="betInput" value="0.25" min="0.25" step="0.25"></div>
-            <div class="pill-box"><span>МИНЫ</span><input type="number" id="minesInput" value="3" min="1" max="24"></div>
-        </div>
-        <button class="main-action-btn" id="actionBtn" onclick="startGame()">Сделать ставку</button>
-    </div>
-</div>
+            <button id="demoModeToggleBtn" class="main-action-btn" style="margin-top: 12px; background: linear-gradient(135deg, #3b82f6, #1d4ed8);" onclick="toggleDemoMode()">
+                Включить Демо-режим (Тест)
+            </button>
 
-<div id="screen-tasks" class="screen"><div class="menu-title">Задания</div><p style="color:var(--text-sec); margin-left: 4px;">Выполняйте задания для получения GRAM.</p></div>
-<div id="screen-inventory" class="screen"><div class="menu-title">Инвентарь</div><p style="color:var(--text-sec); margin-left: 4px;">Ваши бустеры и кейсы.</p></div>
-<div id="screen-leaders" class="screen"><div class="menu-title">Лидеры</div><p style="color:var(--text-sec); margin-left: 4px;">Топ игроков по балансу GRAM.</p></div>
+            <div class="settings-item-row" onclick="openDepositModal()" style="margin-top: 10px;">
+                <span>Пополнить баланс (TON / GRAM)</span>
+                <span style="color: var(--text-sec);">&rsaquo;</span>
+            </div>
 
-<!-- ПРОФИЛЬ -->
-<div id="screen-profile" class="screen">
-    <div class="menu-title">Профиль</div>
-    <div class="profile-header-card">
-        <div class="profile-avatar-large" id="profile-avatar-large">US</div>
-        <div class="profile-user-info">
-            <h3 id="profile-name">Игрок</h3>
-            <p id="profile-username">@username</p>
+            <div class="settings-item-row" style="cursor: default; margin-top: 8px;">
+                <span>Звуки и вибро</span>
+                <label class="switch">
+                    <input type="checkbox" id="soundToggle" checked onchange="toggleSound(this)">
+                    <span class="slider"></span>
+                </label>
+            </div>
         </div>
     </div>
 
-    <div class="ref-card">
-        <div class="ref-title">Реферальная система</div>
-        <div class="ref-subtitle">Приглашайте друзей и получайте бонус</div>
-        <div class="ref-link-box">
-            <input type="text" id="refLinkInput" readonly value="">
-            <button class="ref-share-btn" onclick="shareRefLink()">&#10148;</button>
+    <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,19,0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
+        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:24px; padding:20px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:18px;">Пополнение GRAM</h3>
+                <span onclick="closeDepositModal()" style="font-size:22px; cursor:pointer; color:var(--text-sec);">&times;</span>
+            </div>
+            <p style="margin:0; font-size:12px; color:var(--text-sec);">Курс 1 к 1 (1 TON = 1 GRAM). Выберите сумму:</p>
+            <div id="ton-connect-button" style="display:flex; justify-content:center; margin: 5px 0; width: 100%;"></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button class="preset-btn" onclick="selectDepositTon(1.0)">1 GRAM</button>
+                <button class="preset-btn" onclick="selectDepositTon(5.0)">5 GRAM</button>
+                <button class="preset-btn" onclick="selectDepositTon(10.0)">10 GRAM</button>
+                <button class="preset-btn" onclick="selectDepositTon(50.0)">50 GRAM</button>
+            </div>
+            <div class="pill-box" style="width:100%;">
+                <span>GRAM</span>
+                <input type="number" id="customTonInput" value="1.0" min="0.1" step="0.1">
+                <span>СУММА</span>
+            </div>
+            <button class="main-action-btn" onclick="sendTonDeposit()">Оплатить</button>
         </div>
-        <div class="ref-stats-row">
-            <div class="ref-stat-box"><h4 id="refCount">0</h4><p>Друзей</p></div>
-            <div class="ref-stat-box"><h4 id="refEarned">0.00</h4><p>Заработано GRAM</p></div>
-        </div>
-        <button class="ref-claim-btn" onclick="claimRefRewards()">Забрать награду</button>
     </div>
 
-    <div class="settings-card">
-        <div class="cashback-top">
-            <div><h4>Кешбек</h4><p>Возврат 15% от проигрышей за неделю.</p></div>
-        </div>
-        <div class="cashback-amount"><span id="cashbackBalance">0.00 GRAM</span> Доступно</div>
-        <button class="cashback-btn" onclick="claimCashback()">Получить <span id="cashbackBtnVal">0.00</span> GRAM</button>
-
-        <button id="demoModeToggleBtn" class="main-action-btn" style="margin-top: 12px; background: linear-gradient(135deg, #273248, #1a2232); border: 1px solid rgba(251, 191, 36, 0.25); color: var(--accent-gold); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);" onclick="toggleDemoMode()">
-            Включить Демо-режим (Тест)
+    <div class="nav-bar">
+        <button class="nav-item active" onclick="switchNav('games', this)">
+            <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+            <span>Игры</span>
         </button>
-
-        <div class="settings-item-row" onclick="openDepositModal()" style="margin-top: 10px;">
-            <span>Пополнить баланс (TON / GRAM)</span>
-            <span style="color: var(--accent-gold); font-weight: 800;">&rsaquo;</span>
-        </div>
-
-        <div class="settings-item-row" style="cursor: default; margin-top: 8px;">
-            <span>Звуки и вибро</span>
-            <label class="switch">
-                <input type="checkbox" id="soundToggle" checked onchange="toggleSound(this)">
-                <span class="slider"></span>
-            </label>
-        </div>
+        <button class="nav-item" onclick="switchNav('tasks', this)">
+            <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+            <span>Задачи</span>
+        </button>
+        <button class="nav-item" onclick="switchNav('inventory', this)">
+            <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM10 4h4v2h-4V4zm10 15H4V8h16v11z"/></svg>
+            <span>Инвентарь</span>
+        </button>
+        <button class="nav-item" onclick="switchNav('leaders', this)">
+            <svg viewBox="0 0 24 24"><path d="M16 11V3H8v8H2v2h2v8h16v-8h2v-2h-6zm-6-6h4v14h-4V5zm-6 8h2v6H4v-6zm16 6h-2v-6h2v6z"/></svg>
+            <span>Лидеры</span>
+        </button>
+        <button class="nav-item" onclick="switchNav('profile', this)">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+            <span>Профиль</span>
+        </button>
     </div>
-</div>
 
-<!-- МОДАЛЬНОЕ ОКНО ДЕПОЗИТА -->
-<div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,14,0.82); backdrop-filter:blur(20px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
-    <div class="deposit-modal-box">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; font-size:18px; font-weight:800;">Пополнение GRAM</h3>
-            <span onclick="closeDepositModal()" style="font-size:24px; line-height:1; cursor:pointer; color:var(--text-sec); padding: 0 4px;">&times;</span>
-        </div>
-        <p style="margin:0; font-size:12px; color:var(--text-sec);">Курс 1 к 1 (1 TON = 1 GRAM). Выберите сумму:</p>
-        <div id="ton-connect-button" style="display:flex; justify-content:center; margin: 4px 0; width: 100%;"></div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <button class="preset-btn" onclick="selectDepositTon(1.0)">1 GRAM</button>
-            <button class="preset-btn" onclick="selectDepositTon(5.0)">5 GRAM</button>
-            <button class="preset-btn" onclick="selectDepositTon(10.0)">10 GRAM</button>
-            <button class="preset-btn" onclick="selectDepositTon(50.0)">50 GRAM</button>
-        </div>
-        <div class="pill-box" style="width:100%;">
-            <span>GRAM</span>
-            <input type="number" id="customTonInput" value="1.0" min="0.1" step="0.1">
-            <span>СУММА</span>
-        </div>
-        <button class="main-action-btn" onclick="sendTonDeposit()">Оплатить</button>
-    </div>
-</div>
-
-<!-- ПАРЯЩЕЕ НИЖНЕЕ МЕНЮ -->
-<div class="nav-bar">
-    <button class="nav-item active" onclick="switchNav('games', this)">
-        <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-        <span>Игры</span>
-    </button>
-    <button class="nav-item" onclick="switchNav('tasks', this)">
-        <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-        <span>Задачи</span>
-    </button>
-    <button class="nav-item" onclick="switchNav('inventory', this)">
-        <svg viewBox="0 0 24 24"><path d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM10 4h4v2h-4V4zm10 15H4V8h16v11z"/></svg>
-        <span>Инвентарь</span>
-    </button>
-    <button class="nav-item" onclick="switchNav('leaders', this)">
-        <svg viewBox="0 0 24 24"><path d="M16 11V3H8v8H2v2h2v8h16v-8h2v-2h-6zm-6-6h4v14h-4V5zm-6 8h2v6H4v-6zm16 6h-2v-6h2v6z"/></svg>
-        <span>Лидеры</span>
-    </button>
-    <button class="nav-item" onclick="switchNav('profile', this)">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
-        <span>Профиль</span>
-    </button>
-</div>
-
-<script type="module" src="js/main.js"></script>
+    <!-- Подключение main.js напрямую из корня репозитория -->
+    <script type="module" src="./main.js?v=2026"></script>
 </body>
 </html>
