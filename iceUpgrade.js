@@ -24,7 +24,11 @@ let currentZoom = 1.0;
 let cameraX = WORLD_SIZE / 2;
 let cameraY = WORLD_SIZE / 2;
 let aimStartTime = 0;
-let finalAimAngle = 0;
+
+// [ФИКС] Добавлены переменные для уникализации анимации
+let dynamicSpinTarget = 0; 
+let dynamicCurveIntensity = 0; 
+let dynamicCurveDirection = 1;
 
 let userAvatarImg = new Image();
 let isUserAvatarLoaded = false;
@@ -278,22 +282,25 @@ window.startIceUpgrade = async function startIceUpgrade() {
     currentZoom = 1.0; cameraX = WORLD_SIZE / 2; cameraY = WORLD_SIZE / 2;
     upgradePuck.x = WORLD_SIZE / 2; upgradePuck.y = WORLD_SIZE / 2; upgradePuck.trail = [];
     aimStartTime = performance.now();
-    finalAimAngle = Math.random() * Math.PI * 2;
+    
+    // [ФИКС] Реальный рандом для визуала. Количество кругов вращения + случайный угол от 0 до 360
+    dynamicSpinTarget = (Math.PI * 2 * (2 + Math.random() * 3)) + (Math.random() * Math.PI * 2);
 
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
     cancelAnimationFrame(upgradeAnimId);
-    
     runAimingLoop(response);
 };
 
 function runAimingLoop(serverResponse) {
     if (upgradeState !== 'AIMING') return;
     let elapsed = performance.now() - aimStartTime;
+    
     let progress = Math.min(elapsed / 1500, 1.0); 
-    let easeProgress = 1 - Math.pow(1 - progress, 2);
-    let totalSpins = Math.PI * 2 * 3;
-    let currentArrowAngle = (totalSpins * easeProgress + finalAimAngle * progress) % (Math.PI * 2);
+    let easeProgress = 1 - Math.pow(1 - progress, 2); // Плавное замедление
+    
+    // Вращение до динамически сгенерированного таргета
+    let currentArrowAngle = (dynamicSpinTarget * easeProgress) % (Math.PI * 2);
 
     drawFrame(WORLD_SIZE / 2, WORLD_SIZE / 2, 1.0, currentArrowAngle, true);
 
@@ -314,14 +321,19 @@ function startPuckFlight(serverResponse) {
     upgradeState = 'SPINNING';
     const geo = getSectorGeometry(upgradeChance);
     
+    // [ФИКС] Выбор финальной точки приземления (разброс)
     if (serverResponse.is_win) {
-        targetFlyX = geo.greenCentroid.x + (Math.random() * 60 - 30);
-        targetFlyY = geo.greenCentroid.y + (Math.random() * 60 - 30);
+        targetFlyX = geo.greenCentroid.x + (Math.random() * 80 - 40);
+        targetFlyY = geo.greenCentroid.y + (Math.random() * 80 - 40);
     } else {
-        targetFlyX = geo.botCentroid.x + (Math.random() * 60 - 30);
-        targetFlyY = geo.botCentroid.y + (Math.random() * 60 - 30);
+        targetFlyX = geo.botCentroid.x + (Math.random() * 80 - 40);
+        targetFlyY = geo.botCentroid.y + (Math.random() * 80 - 40);
     }
     
+    // [ФИКС] Генерация уникальной кривой полета (загибание шайбы)
+    dynamicCurveDirection = Math.random() > 0.5 ? 1 : -1;
+    dynamicCurveIntensity = 30 + Math.random() * 150; // Насколько сильно изгибается траектория
+
     flightProgress = 0;
     cancelAnimationFrame(upgradeAnimId);
     runFlightLoop(serverResponse);
@@ -334,7 +346,9 @@ function runFlightLoop(serverResponse) {
     if (flightProgress >= 1.0) flightProgress = 1.0;
 
     let ease = 1 - Math.pow(1 - flightProgress, 3);
-    let curve = Math.sin(flightProgress * Math.PI) * 120;
+    
+    // [ФИКС] Применяем сгенерированную кривую
+    let curve = Math.sin(flightProgress * Math.PI) * dynamicCurveIntensity * dynamicCurveDirection;
     
     upgradePuck.x = startFlyX + (targetFlyX - startFlyX) * ease + curve;
     upgradePuck.y = startFlyY + (targetFlyY - startFlyY) * ease - curve;

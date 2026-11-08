@@ -35,6 +35,8 @@ export function initGrid() {
         const cell = document.createElement('div');
         cell.classList.add('cell');
         cell.dataset.index = i;
+        // Добавляем плавность для анимаций
+        cell.style.transition = 'transform 0.15s ease, background 0.2s, opacity 0.2s';
         cell.addEventListener('click', () => clickCell(i, cell));
         gridEl.appendChild(cell);
     }
@@ -95,13 +97,27 @@ window.startGame = async function startGame() {
 };
 
 async function clickCell(index, cell) {
-    if (!minesGameStarted || minesGameOver || cell.classList.contains('revealed')) return;
+    // [ФИКС] Блокируем клик, если уже ждем ответ от сервера для этой ячейки
+    if (!minesGameStarted || minesGameOver || cell.classList.contains('revealed') || cell.dataset.waiting === "true") return;
     
     let currencyName = isDemoMode ? "DEMO" : "GRAM";
 
+    // [ФИКС] Optimistic UI: Моментальный визуальный отклик до ответа сервера
+    cell.dataset.waiting = "true";
+    cell.style.transform = 'scale(0.85)';
+    cell.style.opacity = '0.7';
+    cell.innerText = '?'; 
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+
     let response = await apiCall('/api/mines/click', { index: index });
     
+    // Возвращаем размер на место
+    cell.style.transform = 'scale(1)';
+    
     if (!response || response.error) {
+        cell.dataset.waiting = "false";
+        cell.innerText = '';
+        cell.style.opacity = '1';
         showToast(response?.error || "Ошибка клика", false);
         return;
     }
@@ -110,6 +126,7 @@ async function clickCell(index, cell) {
 
     if (response.status === 'loss') {
         cell.classList.add('mine'); cell.innerText = 'X';
+        cell.style.opacity = '1';
         minesGameOver = true; minesGameStarted = false;
         revealAllMines(response.board); 
         resetUI();
@@ -117,6 +134,7 @@ async function clickCell(index, cell) {
     } 
     else if (response.status === 'continue' || response.status === 'win') {
         cell.classList.add('safe'); cell.innerText = '+';
+        cell.style.opacity = '1';
         currentMultiplier = response.multiplier || currentMultiplier;
         
         let currentWin = (currentBet * currentMultiplier).toFixed(2);
@@ -126,8 +144,6 @@ async function clickCell(index, cell) {
         if (actionBtn && response.status !== 'win') {
             actionBtn.innerText = `Забрать (${currentWin} ${currencyName})`;
         }
-
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('light');
 
         if (response.status === 'win') {
             minesGameOver = true; minesGameStarted = false;
@@ -173,6 +189,7 @@ function revealAllMines(serverBoard) {
         if (serverBoard[idx] === 'mine') { 
             cell.classList.add('mine'); 
             cell.innerText = 'X'; 
+            cell.style.opacity = '1';
         } else if (!cell.classList.contains('safe')) { 
             cell.innerText = '.'; 
             cell.style.opacity = '0.4'; 

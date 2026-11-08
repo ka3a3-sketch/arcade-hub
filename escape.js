@@ -8,8 +8,8 @@ const escapeBetInput = document.getElementById('escapeBetInput');
 const escapeActionBtn = document.getElementById('escapeActionBtn');
 
 let escapeState = 'IDLE'; 
-let escapeMultiplier = 0.00;
-let ball = { x: 150, y: 150, vx: 5, vy: -4, radius: 10 };
+let escapeMultiplier = 1.00;
+let ball = { x: 150, y: 150, vx: 0, vy: 0, radius: 10 };
 let ringRadius = 100;
 let ringRotation = 0; 
 let escapeAnimId = null;
@@ -42,7 +42,7 @@ window.maxEscapeBet = function() {
 export function resetEscapeVisuals() {
     if (escapeState === 'FLYING_REWARD' || !escapeCtx) return;
     escapeState = 'IDLE';
-    escapeMultiplier = 0.00;
+    escapeMultiplier = 1.00;
     ball.x = 150; ball.y = 150; ringRotation = 0;
     floatingAnim.active = false;
     drawEscapeFrame();
@@ -61,7 +61,6 @@ window.startEscapeGame = async function startEscapeGame() {
         escapeActionBtn.disabled = true;
     }
 
-    // Запрашиваем результат у сервера через новый apiCall
     let response = await apiCall('/api/escape/play', { bet: currentBetAmount, is_demo: isDemoMode });
     
     if (!response || response.error) {
@@ -84,15 +83,17 @@ window.startEscapeGame = async function startEscapeGame() {
     if (floatingAnim.isLossTimer) { clearTimeout(floatingAnim.isLossTimer); floatingAnim.isLossTimer = null; }
 
     escapeState = 'PLAYING';
-    escapeMultiplier = 0.00;
+    escapeMultiplier = 1.00; // Начинаем с 1.00x
     floatingAnim.active = false;
     
     if (escapeActionBtn) escapeActionBtn.innerText = "Ускорение...";
 
     ball.x = 150; ball.y = 150;
+    // [ФИКС] Реальный начальный импульс
     let angle = Math.random() * Math.PI * 2;
-    ball.vx = Math.cos(angle) * 5.5;
-    ball.vy = Math.sin(angle) * 5.5;
+    let speed = 5.0 + Math.random() * 2.0;
+    ball.vx = Math.cos(angle) * speed;
+    ball.vy = Math.sin(angle) * speed;
 
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
     cancelAnimationFrame(escapeAnimId);
@@ -103,36 +104,50 @@ function runEscapeLoop(finalBalance) {
     if (escapeState === 'IDLE') return;
 
     if (escapeState === 'PLAYING') {
-        ringRotation += 0.035; 
-        ball.x += ball.vx; ball.y += ball.vy;
+        ringRotation += 0.04; // Вращение кольца
+        
+        // [ФИКС] Плавный рост множителя, как в настоящих краш-играх
+        escapeMultiplier += 0.008; 
+
+        ball.x += ball.vx; 
+        ball.y += ball.vy;
 
         let dx = ball.x - 150, dy = ball.y - 150;
         let dist = Math.sqrt(dx * dx + dy * dy);
         let maxDist = ringRadius - ball.radius;
 
+        // [ФИКС] Реальный векторный отскок
         if (dist >= maxDist) {
             let nx = dx / dist, ny = dy / dist;
             let dot = ball.vx * nx + ball.vy * ny;
-            ball.vx -= 2 * dot * nx; ball.vy -= 2 * dot * ny;
-            ball.x = 150 + nx * maxDist; ball.y = 150 + ny * maxDist;
+            
+            ball.vx -= 2 * dot * nx; 
+            ball.vy -= 2 * dot * ny;
+            
+            // Предотвращаем застревание шарика в текстуре стены
+            ball.x = 150 + nx * (maxDist - 1); 
+            ball.y = 150 + ny * (maxDist - 1);
 
-            escapeMultiplier += 0.10;
             if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        }
 
-            if (escapeMultiplier >= serverTargetMultiplier) {
-                escapeMultiplier = serverTargetMultiplier;
-                
-                if (serverIsWin) {
-                    escapeState = 'ESCAPING';
-                    let targetX = 70, targetY = 270;
-                    let fDx = targetX - ball.x, fDy = targetY - ball.y, fDist = Math.sqrt(fDx*fDx + fDy*fDy);
-                    ball.vx = (fDx / fDist) * 8.0; ball.vy = (fDy / fDist) * 8.0;
-                    setTimeout(() => finishEscapeGame(finalBalance), 600);
-                } else {
-                    escapeState = 'CRASH';
-                    ball.vx = 0; ball.vy = 0;
-                    setTimeout(() => finishEscapeGame(finalBalance), 500);
-                }
+        // [ФИКС] Логика завершения строго по достижению таргета
+        if (escapeMultiplier >= serverTargetMultiplier) {
+            escapeMultiplier = serverTargetMultiplier;
+            
+            if (serverIsWin) {
+                escapeState = 'ESCAPING';
+                // [ФИКС] Шарик выстреливает точно через открытый просвет кольца
+                let exitAngle = ringRotation; 
+                ball.vx = Math.cos(exitAngle) * 10.0; 
+                ball.vy = Math.sin(exitAngle) * 10.0;
+                setTimeout(() => finishEscapeGame(finalBalance), 600);
+            } else {
+                escapeState = 'CRASH';
+                // [ФИКС] Мгновенная остановка "разбивание"
+                ball.vx = 0; ball.vy = 0;
+                if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+                setTimeout(() => finishEscapeGame(finalBalance), 600);
             }
         }
     } else if (escapeState === 'ESCAPING') {
@@ -164,13 +179,27 @@ function runEscapeLoop(finalBalance) {
 function drawEscapeFrame() {
     if (!escapeCtx) return;
     escapeCtx.clearRect(0, 0, 300, 300);
-    escapeCtx.save(); escapeCtx.translate(150, 150); escapeCtx.rotate(ringRotation);
+    escapeCtx.save(); 
+    escapeCtx.translate(150, 150); 
+    escapeCtx.rotate(ringRotation);
+    
     escapeCtx.beginPath();
     
-    let arcEnd = (escapeState === 'PLAYING' || escapeState === 'ESCAPING') ? (Math.PI * 2 - 0.2) : (Math.PI * 2);
-    escapeCtx.arc(0, 0, ringRadius, 0.2, arcEnd, false);
+    // [ФИКС] Визуализируем явный разрыв в кольце по центру угла 0
+    let gapSize = 0.6; // Размер разрыва в радианах
+    let arcStart = gapSize / 2;
+    let arcEnd = Math.PI * 2 - (gapSize / 2);
+    
+    // Если краш - кольцо схлопывается (нет разрыва)
+    if (escapeState === 'CRASH') {
+        arcStart = 0; arcEnd = Math.PI * 2;
+    }
+
+    escapeCtx.arc(0, 0, ringRadius, arcStart, arcEnd, false);
     escapeCtx.strokeStyle = (escapeState === 'CRASH') ? '#ef4444' : '#38bdf8'; 
-    escapeCtx.lineWidth = 4; escapeCtx.stroke();
+    escapeCtx.lineWidth = 5; 
+    escapeCtx.lineCap = 'round';
+    escapeCtx.stroke();
     escapeCtx.restore();
 
     if (escapeState === 'PLAYING' || escapeState === 'ESCAPING' || escapeState === 'CRASH') {
@@ -218,7 +247,6 @@ function finishEscapeGame(finalBalance) {
         floatingAnim.startX = 225; floatingAnim.startY = 240; floatingAnim.x = floatingAnim.startX; floatingAnim.y = floatingAnim.startY;
         floatingAnim.alpha = 1.0;
         updateBalance(finalBalance);
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
         if (escapeActionBtn) {
             escapeActionBtn.innerText = "Играть"; 
             escapeActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)"; 
