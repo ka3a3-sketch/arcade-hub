@@ -151,11 +151,7 @@
         /* --- ИНТЕРФЕЙС ИГР --- */
         .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
         .escape-canvas-wrap { position: relative; width: 100%; max-width: 360px; aspect-ratio: 1 / 1; margin: 0 auto 12px auto; display: flex; align-items: center; justify-content: center; }
-        .escape-outcomes { display: flex; justify-content: space-between; width: 100%; max-width: 300px; margin: 0 auto 8px auto; padding: 0 10px; font-size: 13px; font-weight: 700; color: #64748b; }
-        .escape-status-bar { width: 100%; height: 8px; border-radius: 4px; display: flex; overflow: hidden; margin-bottom: 12px; background: #1e293b; }
-        .status-green { background: var(--accent-green); flex: 1; }
-        .status-red { background: #ef4444; flex: 1; }
-
+        
         .control-panel { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; margin: 0 auto; }
         .presets-row { display: flex; gap: 6px; justify-content: center; }
         .preset-btn { background: var(--card-bg); border: 1px solid var(--border-color); color: #cbd5e1; padding: 10px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; }
@@ -253,7 +249,7 @@
             <div class="card-box escape" onclick="openGame('escape')">
                 <div class="card-content">
                     <h3>ESCAPE</h3>
-                    <p>Поймай множитель</p>
+                    <p>Побег из кольца</p>
                     <span class="card-link">Играть &rarr;</span>
                 </div>
             </div>
@@ -285,13 +281,12 @@
         </div>
     </div>
 
-    <!-- ЭКРАН 2: ICE UPGRADE (НОВЫЙ ДИЗАЙН DARK NEON FROST) -->
+    <!-- ЭКРАН 2: ICE UPGRADE -->
     <div id="screen-iceUpgrade" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center;">ICE UPGRADE</div>
         
         <div class="escape-container">
-            <!-- Неоновая рамка для Canvas -->
             <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #080E18; border-radius: 28px; border: 2px solid rgba(0, 242, 254, 0.3); box-shadow: 0 0 25px rgba(0, 242, 254, 0.15); overflow: hidden; position: relative; margin: 0 auto;">
                 <canvas id="upgradeCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
             </div>
@@ -324,13 +319,21 @@
 
     <!-- ЭКРАН 3: ESCAPE -->
     <div id="screen-escape" class="screen">
-        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-        <div class="escape-container">
-            <div class="escape-canvas-wrap"><canvas id="escapeCanvas" width="300" height="300"></canvas></div>
-            <div class="escape-outcomes"><span>WIN</span><span>CRASH</span></div>
-            <div class="escape-status-bar"><div class="status-green"></div><div class="status-red"></div></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 90vw; max-width: 380px; margin: 0 auto 8px auto;">
+            <button class="back-btn" style="margin: 0;" onclick="openScreen('games')">&larr; В меню</button>
+            <div id="escapeTopInfo" style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px;">
+                <span id="escapeBalanceDisplay" style="color: var(--neon-cyan);">0.00 DEMO</span>
+            </div>
         </div>
-        <div class="control-panel glass-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
+        
+        <div class="escape-container">
+            <!-- Новый холст с кибер-дизайном под физику -->
+            <div id="escapeCanvasWrap" style="position: relative; width: 90vw; max-width: 380px; height: 420px; background: #060913; border-radius: 24px; border: 1px solid rgba(0, 242, 254, 0.2); box-shadow: 0 8px 30px rgba(0,0,0,0.8); overflow: hidden; margin: 0 auto;">
+                <canvas id="escapeCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
+            </div>
+        </div>
+
+        <div class="control-panel glass-panel" style="margin-top: 12px; width: 90vw; max-width: 380px;">
             <div class="presets-row">
                 <button class="preset-btn" onclick="multiplyEscapeBet(0.5)">/2</button>
                 <button class="preset-btn" onclick="multiplyEscapeBet(2)">x2</button>
@@ -338,11 +341,12 @@
             </div>
             <div class="actions-row">
                 <div class="pill-box" style="width: 100%; background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1);">
-                    <input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25">
                     <span>СТАВКА</span>
+                    <input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25" style="color: var(--neon-cyan); text-shadow: 0 0 5px rgba(0,242,254,0.5);">
+                    <span>GRAM</span>
                 </div>
             </div>
-            <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()">Играть</button>
+            <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()" style="background: linear-gradient(135deg, #00f2fe, #4facfe); box-shadow: 0 6px 20px rgba(0, 242, 254, 0.3); color: #000;">Сделать ставку</button>
         </div>
     </div>
 
@@ -472,6 +476,6 @@
         </button>
     </div>
 
-    <script type="module" src="./main.js?v=2029"></script>
+    <script type="module" src="./main.js?v=2030"></script>
 </body>
 </html>
