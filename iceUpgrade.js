@@ -10,15 +10,15 @@ const upgradeChanceVal = document.getElementById('upgradeChanceVal');
 const upgradeMultVal = document.getElementById('upgradeMultVal');
 const upgradeActionBtn = document.getElementById('upgradeActionBtn');
 
-let upgradeState = 'IDLE'; 
+let upgradeState = 'IDLE'; // Стейты: IDLE -> AIMING -> ROLLING -> FINISHED
 let upgradeChance = 50; 
 let upgradeMultiplier = 1.96;
 
 const WORLD_SIZE = 800;
 const S_TOTAL = WORLD_SIZE * WORLD_SIZE;
 
-// Физика шайбы
-let upgradePuck = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0, radius: 26, trail: [] };
+// Физика и состояние шайбы
+let upgradePuck = { x: 0, y: 0, radius: 26, trail: [] };
 let upgradeAnimId = null;
 
 // Камера и эффекты
@@ -27,16 +27,17 @@ let cameraX = WORLD_SIZE / 2;
 let cameraY = WORLD_SIZE / 2;
 let screenShake = { x: 0, y: 0, intensity: 0 };
 
-// Таймлайн
-let flightStartTime = 0;
-let targetFlyX = 0;
-let targetFlyY = 0;
+// Детерминированный таймлайн
+let aimStartTime = 0;
+let targetAngle = 0;
+let calculatedPath = []; // Массив предрассчитанных кадров физики
+let currentPlaybackFrame = 0;
 
 // Цвета Dark Neon Frost
-const COLOR_USER = '#00f2fe'; // Циан (Игрок)
-const COLOR_BOT = '#ffaa00';  // Янтарь (Бот)
+const COLOR_USER = '#00f2fe'; 
+const COLOR_BOT = '#ffaa00';  
 
-// Процедурные царапины (создаются один раз)
+// Процедурные царапины (генерируются 1 раз)
 let iceScratches = [];
 for (let i = 0; i < 150; i++) {
     iceScratches.push({
@@ -50,7 +51,6 @@ let userAvatarImg = new Image();
 let isUserAvatarLoaded = false;
 let botAvatarImg = new Image();
 let isBotAvatarLoaded = false;
-
 botAvatarImg.src = "bot-logo.png";
 botAvatarImg.onload = function() { isBotAvatarLoaded = true; if (upgradeState === 'IDLE') redraw(); };
 
@@ -81,7 +81,6 @@ window.updateUpgradeChance = function(val) {
     let parsedVal = parseInt(val);
     if (parsedVal < 30) parsedVal = 30;
     if (parsedVal > 75) parsedVal = 75;
-    
     upgradeChance = parsedVal;
     if (upgradeChanceRange && upgradeChanceRange.value != upgradeChance) upgradeChanceRange.value = upgradeChance;
     upgradeMultiplier = parseFloat((98 / upgradeChance).toFixed(2));
@@ -107,35 +106,245 @@ window.maxUpgradeBet = function() {
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 };
 
-// Геометрия секторов на основе шанса
 function getSectorGeometry(chance) {
     const pBot = Math.max(0.01, Math.min(0.99, (100 - chance) / 100));
-    const sBot = S_TOTAL * pBot;
-    const legBot = Math.sqrt(2 * sBot); 
+    const legBot = Math.sqrt(2 * S_TOTAL * pBot); 
     const W = WORLD_SIZE, H = WORLD_SIZE;
 
     const botCentroid = { x: legBot / 3, y: H - legBot / 3 };
     const botRadius = Math.max(22, Math.min(65, legBot * 0.28));
     const greenCentroid = { x: W - (W - legBot * 0.5) * 0.42, y: (H - legBot * 0.5) * 0.42 };
 
-    // Точки линии-разделителя
     const lineStart = { x: 0, y: H - legBot };
     const lineEnd = { x: legBot, y: H };
 
     return { legBot, botCentroid, botRadius, greenCentroid, lineStart, lineEnd };
 }
 
-function drawFrame(targetCamX, targetCamY, targetZoom = 1.0) {
+// Проверка: находится ли точка в зоне Бота (Треугольник в левом нижнем углу)
+function isPointInBotZone(x, y, legBot) {
+    return (x <= legBot && y >= x + WORLD_SIZE - legBot);
+}
+
+// --- ДЕТЕРМИНИРОВАННЫЙ ФИЗИЧЕСКИЙ ДВИЖОК (ПРЕДРАСЧЕТ) ---
+// Симулирует бросок и возвращает массив координат кадров.
+function simulatePhysicsPath(startX, startY, angle, speed) {
+    let path = [];
+    let x = startX, y = startY;
+    let vx = Math.cos(angle) * speed;
+    let vy = Math.sin(angle) * speed;
+    let r = 26; // Радиус шайбы
+    const FRICTION = 0.985; // Честное линейное затухание
+
+    // Симулируем максимум 1000 кадров (~16 секунд полета)
+    for (let frame = 0; frame < 1000; frame++) {
+        vx *= FRICTION;
+        vy *= FRICTION;
+        x += vx;
+        y += vy;
+
+        let bounced = false;
+        if (x - r < 0) { x = r; vx *= -1; bounced = true; }
+        if (x + r > WORLD_SIZE) { x = WORLD_SIZE - r; vx *= -1; bounced = true; }
+        if (y - r < 0) { y = r; vy *= -1; bounced = true; }
+        if (y + r > WORLD_SIZE) { y = WORLD_SIZE - r; vy *= -1; bounced = true; }
+
+        path.push({ x: x, y: y, bounced: bounced });
+
+        // Если скорость упала ниже порога - шайба остановилась
+        if (Math.hypot(vx, vy) < 0.05) break;
+    }
+    return path;
+}
+
+// Ищет честный физический бросок, который приведет к нужному исходу
+function findWinningPath(startX, startY, isUserWin) {
+    const geo = getSectorGeometry(upgradeChance);
+    const MAX_ATTEMPTS = 2000;
+
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        let testAngle = Math.random() * Math.PI * 2;
+        let testSpeed = 30 + Math.random() * 25; // Мощный импульс (30-55)
+        
+        let path = simulatePhysicsPath(startX, startY, testAngle, testSpeed);
+        let finalPoint = path[path.length - 1];
+        
+        let inBotZone = isPointInBotZone(finalPoint.x, finalPoint.y, geo.legBot);
+        
+        // Если предрасчет попал в нужную зону — мы нашли идеальный бросок!
+        if (isUserWin && !inBotZone) return { path, angle: testAngle };
+        if (!isUserWin && inBotZone) return { path, angle: testAngle };
+    }
+    
+    // Fallback (почти невозможен)
+    return { path: simulatePhysicsPath(startX, startY, 0, 30), angle: 0 };
+}
+
+
+// --- ОСНОВНОЙ ИГРОВОЙ ЦИКЛ ---
+window.startIceUpgrade = async function startIceUpgrade() {
+    if (upgradeState !== 'IDLE') return;
+    
+    let betVal = parseFloat(parseFloat(upgradeBetInput.value || 0.25).toFixed(2));
+    if (betVal < 0.25) betVal = 0.25;
+    if (betVal > 2.0) betVal = 2.0;
+    upgradeBetInput.value = betVal;
+
+    if (score < betVal) { showToast('Недостаточно GRAM на балансе!', false); return; }
+
+    if (upgradeChanceRange) upgradeChanceRange.disabled = true;
+    if (upgradeBetInput) upgradeBetInput.disabled = true;
+    if (upgradeActionBtn) {
+        upgradeActionBtn.innerText = "Подготовка арены...";
+        upgradeActionBtn.style.background = "#4b5563";
+        upgradeActionBtn.disabled = true;
+    }
+
+    let response = await apiCall('/api/upgrade/play', { bet: betVal, chance: upgradeChance, is_demo: isDemoMode });
+    
+    if (!response || response.error) {
+        showToast(response?.error || "Ошибка соединения", false);
+        resetUpgradeVisuals();
+        return;
+    }
+
+    updateBalance(response.new_balance - response.win_amount); 
+    addCashback(betVal * 0.15);
+
+    // 1. Спавн шайбы в безопасной случайной точке (отступ от стен 100px)
+    upgradePuck.x = 100 + Math.random() * (WORLD_SIZE - 200);
+    upgradePuck.y = 100 + Math.random() * (WORLD_SIZE - 200);
+    upgradePuck.trail = [];
+
+    // 2. Предрасчет физики (мгновенно ищет честную траекторию)
+    let simulationResult = findWinningPath(upgradePuck.x, upgradePuck.y, response.is_win);
+    calculatedPath = simulationResult.path;
+    targetAngle = simulationResult.angle;
+    currentPlaybackFrame = 0;
+
+    // 3. Запуск фазы AIMING (3 секунды)
+    upgradeState = 'AIMING';
+    aimStartTime = performance.now();
+    
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+    cancelAnimationFrame(upgradeAnimId);
+    runGameLoop(response);
+};
+
+function runGameLoop(serverResponse) {
+    if (upgradeState === 'IDLE') return;
+
+    let targetCamX = WORLD_SIZE / 2;
+    let targetCamY = WORLD_SIZE / 2;
+    let targetCamZoom = 1.0;
+    let arrowAngle = 0;
+
+    if (upgradeState === 'AIMING') {
+        let elapsed = performance.now() - aimStartTime;
+        let t = Math.min(elapsed / 3000, 1.0); // 3 секунды прицеливания
+        
+        // Easing ease-out-quart: быстро стартует, плавно тормозит в конце
+        let ease = 1 - Math.pow(1 - t, 4); 
+        
+        // Стрелка делает 12 полных оборотов и останавливается ровно на targetAngle
+        arrowAngle = targetAngle - (Math.PI * 2 * 12) * (1 - ease);
+
+        targetCamX = upgradePuck.x;
+        targetCamY = upgradePuck.y;
+        targetCamZoom = 1.3; // Легкий зум на шайбу перед стартом
+
+        drawFrame(targetCamX, targetCamY, targetCamZoom, arrowAngle);
+
+        if (t >= 1.0) {
+            upgradeState = 'ROLLING';
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
+        }
+
+    } else if (upgradeState === 'ROLLING') {
+        // Читаем предрассчитанный кадр физики
+        if (currentPlaybackFrame < calculatedPath.length) {
+            let frameData = calculatedPath[currentPlaybackFrame];
+            upgradePuck.x = frameData.x;
+            upgradePuck.y = frameData.y;
+            
+            if (frameData.bounced) {
+                screenShake.intensity = 18;
+                if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            }
+
+            // Шлейф
+            if (currentPlaybackFrame % 2 === 0) { // Оптимизация хвоста
+                upgradePuck.trail.push({ x: upgradePuck.x, y: upgradePuck.y });
+                if (upgradePuck.trail.length > 12) upgradePuck.trail.shift();
+            }
+
+            // Кинематографичный зум ровно за 240 кадров (4 секунды) до остановки
+            let framesLeft = calculatedPath.length - currentPlaybackFrame;
+            if (framesLeft < 240) {
+                targetCamX = upgradePuck.x;
+                targetCamY = upgradePuck.y;
+                targetCamZoom = 1.6;
+            } else {
+                targetCamX = WORLD_SIZE / 2;
+                targetCamY = WORLD_SIZE / 2;
+                targetCamZoom = 1.0;
+            }
+
+            currentPlaybackFrame++;
+            drawFrame(targetCamX, targetCamY, targetCamZoom);
+        } else {
+            // Конец пути
+            resolveWinner(serverResponse);
+            return; // Выход из цикла
+        }
+    }
+
+    upgradeAnimId = requestAnimationFrame(() => runGameLoop(serverResponse));
+}
+
+function resolveWinner(serverResponse) {
+    upgradeState = 'FINISHED';
+    let currencyName = isDemoMode ? "DEMO" : "GRAM";
+
+    drawFrame(WORLD_SIZE / 2, WORLD_SIZE / 2, 1.0); // Возврат зума
+    updateBalance(serverResponse.new_balance);
+
+    if (serverResponse.is_win) {
+        showToast(`Победа! +${serverResponse.win_amount} ${currencyName}`, true);
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } else {
+        showToast(`Шайба в зоне бота.`, false);
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+    }
+    setTimeout(resetUpgradeVisuals, 2500);
+}
+
+export function resetUpgradeVisuals() {
+    upgradeState = 'IDLE';
+    currentZoom = 1.0; cameraX = WORLD_SIZE / 2; cameraY = WORLD_SIZE / 2;
+    // Скрываем шайбу
+    upgradePuck.x = -1000; upgradePuck.y = -1000; upgradePuck.trail = [];
+    
+    if (upgradeChanceRange) upgradeChanceRange.disabled = false;
+    if (upgradeBetInput) upgradeBetInput.disabled = false;
+    if (upgradeActionBtn) {
+        upgradeActionBtn.innerText = "Сделать ставку";
+        upgradeActionBtn.style.background = "linear-gradient(135deg, #00f2fe, #4facfe)";
+        upgradeActionBtn.disabled = false;
+    }
+    redraw();
+}
+
+// --- ОТРИСОВКА (DARK NEON FROST) ---
+function drawFrame(targetCamX, targetCamY, targetZoom = 1.0, arrowAngle = null) {
     if (!upgradeCtx || !upgradeCanvas) return;
     syncCanvasSize();
     const w = upgradeCanvas.width, h = upgradeCanvas.height;
 
-    // Плавная интерполяция камеры
     cameraX += (targetCamX - cameraX) * 0.08;
     cameraY += (targetCamY - cameraY) * 0.08;
     currentZoom += (targetZoom - currentZoom) * 0.05;
 
-    // Тряска экрана (Screen Shake)
     if (screenShake.intensity > 0.1) {
         screenShake.x = (Math.random() - 0.5) * screenShake.intensity;
         screenShake.y = (Math.random() - 0.5) * screenShake.intensity;
@@ -144,7 +353,6 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0) {
 
     upgradeCtx.clearRect(0, 0, w, h);
     
-    // Glassmorphism Canvas Border
     upgradeCtx.save();
     upgradeCtx.beginPath();
     const rBorder = 28 * (w / 360);
@@ -152,7 +360,6 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0) {
     else upgradeCtx.rect(0, 0, w, h);
     upgradeCtx.clip(); 
 
-    // Трансформации камеры
     upgradeCtx.save();
     upgradeCtx.translate(w / 2 + screenShake.x, h / 2 + screenShake.y);
     const baseScale = w / WORLD_SIZE;
@@ -161,13 +368,13 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0) {
 
     const geo = getSectorGeometry(upgradeChance);
 
-    // Dark Neon Ice Background
+    // Фон льда
     let bgGrad = upgradeCtx.createRadialGradient(WORLD_SIZE/2, WORLD_SIZE/2, 100, WORLD_SIZE/2, WORLD_SIZE/2, WORLD_SIZE);
     bgGrad.addColorStop(0, '#0F1B2E'); bgGrad.addColorStop(1, '#050914');
     upgradeCtx.fillStyle = bgGrad;
     upgradeCtx.fillRect(0, 0, WORLD_SIZE, WORLD_SIZE);
 
-    // Процедурные царапины
+    // Царапины
     upgradeCtx.lineWidth = 1;
     iceScratches.forEach(s => {
         upgradeCtx.strokeStyle = `rgba(255, 255, 255, ${s.a})`;
@@ -184,47 +391,73 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0) {
     upgradeCtx.stroke();
     upgradeCtx.restore();
 
-    // Затемнение зоны проигравшего (В финале)
+    // Затемнение проигравшего
     if (upgradeState === 'FINISHED') {
         upgradeCtx.fillStyle = 'rgba(5, 9, 20, 0.75)';
         upgradeCtx.beginPath();
-        // Если победитель User (targetFly ближе к greenCentroid) - затемняем треугольник бота
-        let distUser = Math.hypot(targetFlyX - geo.greenCentroid.x, targetFlyY - geo.greenCentroid.y);
-        let distBot = Math.hypot(targetFlyX - geo.botCentroid.x, targetFlyY - geo.botCentroid.y);
-        
-        if (distUser < distBot) {
-            // Победил юзер, затемняем бота
+        if (!isPointInBotZone(upgradePuck.x, upgradePuck.y, geo.legBot)) {
+            // Победил Юзер, темним Бота
             upgradeCtx.moveTo(0, WORLD_SIZE); upgradeCtx.lineTo(0, geo.lineStart.y); upgradeCtx.lineTo(geo.lineEnd.x, WORLD_SIZE);
         } else {
-            // Победил бот, затемняем юзера
+            // Победил Бот, темним Юзера
             upgradeCtx.moveTo(0, 0); upgradeCtx.lineTo(WORLD_SIZE, 0); upgradeCtx.lineTo(WORLD_SIZE, WORLD_SIZE);
             upgradeCtx.lineTo(geo.lineEnd.x, WORLD_SIZE); upgradeCtx.lineTo(0, geo.lineStart.y);
         }
         upgradeCtx.fill();
     }
 
-    // Кибер-пьедесталы и аватары
     drawCyberPedestal(geo.greenCentroid.x, geo.greenCentroid.y, 75, COLOR_USER);
     drawAvatarCircle(userAvatarImg, geo.greenCentroid.x, geo.greenCentroid.y, 60, COLOR_USER, isUserAvatarLoaded, true);
 
     drawCyberPedestal(geo.botCentroid.x, geo.botCentroid.y, geo.botRadius + 10, COLOR_BOT);
     drawAvatarCircle(botAvatarImg, geo.botCentroid.x, geo.botCentroid.y, geo.botRadius, COLOR_BOT, isBotAvatarLoaded, false);
 
-    // Шлейф Шайбы (Particle Trail)
-    if (upgradeState === 'SPINNING' && upgradePuck.trail.length > 0) {
-        for (let i = 0; i < upgradePuck.trail.length; i++) {
-            let p = upgradePuck.trail[i];
-            let alpha = (i / upgradePuck.trail.length) * 0.5;
-            upgradeCtx.beginPath(); upgradeCtx.arc(p.x, p.y, upgradePuck.radius * 0.8, 0, Math.PI * 2);
-            upgradeCtx.fillStyle = `rgba(0, 242, 254, ${alpha})`; upgradeCtx.fill();
+    // Рисуем шайбу и эффекты ТОЛЬКО если игра не в IDLE
+    if (upgradeState !== 'IDLE') {
+        if (upgradeState === 'SPINNING' || upgradeState === 'ROLLING') {
+            for (let i = 0; i < upgradePuck.trail.length; i++) {
+                let p = upgradePuck.trail[i];
+                let alpha = (i / upgradePuck.trail.length) * 0.6;
+                upgradeCtx.beginPath(); upgradeCtx.arc(p.x, p.y, upgradePuck.radius * 0.7, 0, Math.PI * 2);
+                upgradeCtx.fillStyle = `rgba(0, 242, 254, ${alpha})`; upgradeCtx.fill();
+            }
         }
+
+        if (upgradeState === 'AIMING' && arrowAngle !== null) {
+            drawAimSpinner(upgradePuck.x, upgradePuck.y, upgradePuck.radius, arrowAngle);
+        }
+
+        drawCyberPuck(upgradePuck.x, upgradePuck.y, upgradePuck.radius);
     }
 
-    // Кибер-Шайба
-    drawCyberPuck(upgradePuck.x, upgradePuck.y, upgradePuck.radius);
+    upgradeCtx.restore(); 
+    upgradeCtx.restore(); 
+}
 
-    upgradeCtx.restore(); 
-    upgradeCtx.restore(); 
+function drawAimSpinner(x, y, r, angle) {
+    upgradeCtx.save();
+    upgradeCtx.translate(x, y);
+    upgradeCtx.rotate(angle);
+    
+    // Неоновая направляющая стрелка
+    upgradeCtx.shadowColor = '#00f2fe'; upgradeCtx.shadowBlur = 15;
+    upgradeCtx.fillStyle = '#00f2fe';
+    
+    const offset = r + 15;
+    upgradeCtx.beginPath();
+    upgradeCtx.moveTo(offset, 0);
+    upgradeCtx.lineTo(offset + 25, -10);
+    upgradeCtx.lineTo(offset + 25, 10);
+    upgradeCtx.fill();
+
+    // Орбита
+    upgradeCtx.beginPath();
+    upgradeCtx.arc(0, 0, offset - 5, 0, Math.PI * 2);
+    upgradeCtx.strokeStyle = 'rgba(0, 242, 254, 0.3)';
+    upgradeCtx.lineWidth = 2;
+    upgradeCtx.stroke();
+    
+    upgradeCtx.restore();
 }
 
 function drawCyberPedestal(x, y, r, color) {
@@ -233,7 +466,6 @@ function drawCyberPedestal(x, y, r, color) {
     upgradeCtx.strokeStyle = color; upgradeCtx.lineWidth = 4;
     upgradeCtx.setLineDash([15, 10]);
     upgradeCtx.beginPath(); upgradeCtx.arc(x, y, r, 0, Math.PI * 2);
-    // Вращение пьедестала
     let rot = performance.now() / 1000;
     upgradeCtx.translate(x, y); upgradeCtx.rotate(rot);
     upgradeCtx.stroke();
@@ -246,7 +478,7 @@ function drawCyberPuck(x, y, r) {
     upgradeCtx.beginPath(); upgradeCtx.arc(x, y, r, 0, Math.PI * 2);
     upgradeCtx.fillStyle = '#1e293b'; upgradeCtx.fill();
     upgradeCtx.lineWidth = 3; upgradeCtx.strokeStyle = '#cbd5e1'; upgradeCtx.stroke();
-    // Центральный LED диод
+    
     upgradeCtx.beginPath(); upgradeCtx.arc(x, y, r * 0.4, 0, Math.PI * 2);
     upgradeCtx.fillStyle = '#00f2fe'; upgradeCtx.fill();
     upgradeCtx.restore();
@@ -269,173 +501,4 @@ function drawAvatarCircle(img, x, y, r, borderCol, isLoaded, isUser) {
     upgradeCtx.beginPath(); upgradeCtx.arc(x, y, r, 0, Math.PI * 2);
     upgradeCtx.lineWidth = 3; upgradeCtx.strokeStyle = borderCol; upgradeCtx.stroke();
     upgradeCtx.restore();
-}
-
-window.startIceUpgrade = async function startIceUpgrade() {
-    if (upgradeState !== 'IDLE') return;
-    
-    let betVal = parseFloat(parseFloat(upgradeBetInput.value || 0.25).toFixed(2));
-    if (betVal < 0.25) betVal = 0.25;
-    if (betVal > 2.0) betVal = 2.0;
-    upgradeBetInput.value = betVal;
-
-    if (score < betVal) { showToast('Недостаточно GRAM на балансе!', false); return; }
-
-    if (upgradeChanceRange) upgradeChanceRange.disabled = true;
-    if (upgradeBetInput) upgradeBetInput.disabled = true;
-    if (upgradeActionBtn) {
-        upgradeActionBtn.innerText = "Симуляция броска...";
-        upgradeActionBtn.style.background = "#4b5563";
-        upgradeActionBtn.disabled = true;
-    }
-
-    let response = await apiCall('/api/upgrade/play', { bet: betVal, chance: upgradeChance, is_demo: isDemoMode });
-    
-    if (!response || response.error) {
-        showToast(response?.error || "Ошибка соединения", false);
-        resetUpgradeVisuals();
-        return;
-    }
-
-    updateBalance(response.new_balance - response.win_amount); 
-    addCashback(betVal * 0.15);
-
-    upgradeState = 'SPINNING';
-    const geo = getSectorGeometry(upgradeChance);
-    
-    // Определяем финальную точку остановки (разброс внутри пьедестала)
-    if (response.is_win) {
-        targetFlyX = geo.greenCentroid.x + (Math.random() * 40 - 20);
-        targetFlyY = geo.greenCentroid.y + (Math.random() * 40 - 20);
-    } else {
-        targetFlyX = geo.botCentroid.x + (Math.random() * 40 - 20);
-        targetFlyY = geo.botCentroid.y + (Math.random() * 40 - 20);
-    }
-    
-    // Взрывной стартовый импульс (рандомный угол и высокая скорость)
-    upgradePuck.x = WORLD_SIZE / 2; upgradePuck.y = WORLD_SIZE / 2;
-    let initialAngle = Math.random() * Math.PI * 2;
-    let speed = 25 + Math.random() * 10;
-    upgradePuck.vx = Math.cos(initialAngle) * speed;
-    upgradePuck.vy = Math.sin(initialAngle) * speed;
-    upgradePuck.trail = [];
-    
-    flightStartTime = performance.now();
-
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
-    cancelAnimationFrame(upgradeAnimId);
-    runFlightLoop(response);
-};
-
-function runFlightLoop(serverResponse) {
-    if (upgradeState !== 'SPINNING') return;
-
-    let elapsed = performance.now() - flightStartTime;
-    
-    // --- КИНЕМАТОГРАФИЧНЫЙ 7-СЕКУНДНЫЙ ТАЙМЛАЙН ---
-    let phase = elapsed < 3000 ? 1 : (elapsed < 7000 ? 2 : 3);
-    
-    // 1. Трение льда
-    let friction = 1.0;
-    if (phase === 1) {
-        friction = 0.995; // Почти нет трения (свободный полет)
-    } else if (phase === 2) {
-        let p = (elapsed - 3000) / 4000; // Прогресс 2-й фазы (0 -> 1)
-        friction = 0.995 - (p * 0.08); // Нарастающее торможение
-        
-        // Магнитная тяга (невидимо выруливает шайбу к победной точке)
-        let dx = targetFlyX - upgradePuck.x;
-        let dy = targetFlyY - upgradePuck.y;
-        let dist = Math.hypot(dx, dy);
-        let pullForce = (p * 0.035); 
-        if (dist > 10) {
-            upgradePuck.vx += (dx / dist) * pullForce * 20;
-            upgradePuck.vy += (dy / dist) * pullForce * 20;
-        }
-    } else {
-        friction = 0.7; // Резкая остановка на 7-й секунде
-    }
-
-    upgradePuck.vx *= friction;
-    upgradePuck.vy *= friction;
-    upgradePuck.x += upgradePuck.vx;
-    upgradePuck.y += upgradePuck.vy;
-
-    // 2. Упругие отскоки от бортов (AABB)
-    let bounced = false;
-    let r = upgradePuck.radius;
-    if (upgradePuck.x - r < 0) { upgradePuck.x = r; upgradePuck.vx *= -1; bounced = true; }
-    if (upgradePuck.x + r > WORLD_SIZE) { upgradePuck.x = WORLD_SIZE - r; upgradePuck.vx *= -1; bounced = true; }
-    if (upgradePuck.y - r < 0) { upgradePuck.y = r; upgradePuck.vy *= -1; bounced = true; }
-    if (upgradePuck.y + r > WORLD_SIZE) { upgradePuck.y = WORLD_SIZE - r; upgradePuck.vy *= -1; bounced = true; }
-
-    if (bounced) {
-        screenShake.intensity = 15; // Удар по бортам!
-        if (tg && tg.HapticFeedback && phase === 1) tg.HapticFeedback.impactOccurred('light');
-    }
-
-    // 3. Шлейф (Particle Trail)
-    if (Math.hypot(upgradePuck.vx, upgradePuck.vy) > 2) {
-        upgradePuck.trail.push({ x: upgradePuck.x, y: upgradePuck.y });
-        if (upgradePuck.trail.length > 15) upgradePuck.trail.shift();
-    } else {
-        upgradePuck.trail.shift(); 
-    }
-
-    // 4. Управление Камерой (Драматичный зум)
-    let targetCamX = WORLD_SIZE / 2;
-    let targetCamY = WORLD_SIZE / 2;
-    let targetZoom = 1.0;
-
-    if (phase === 2) {
-        targetCamX = upgradePuck.x;
-        targetCamY = upgradePuck.y;
-        targetZoom = 1.6; // Зум на шайбу
-    } else if (phase === 3) {
-        targetCamX = upgradePuck.x;
-        targetCamY = upgradePuck.y;
-        targetZoom = 1.0; // Возврат масштаба
-    }
-
-    drawFrame(targetCamX, targetCamY, targetZoom);
-
-    // 5. Проверка Остановки
-    let currentSpeed = Math.hypot(upgradePuck.vx, upgradePuck.vy);
-    if (phase === 3 || (phase === 2 && currentSpeed < 0.1)) {
-        resolveWinner(serverResponse);
-    } else {
-        upgradeAnimId = requestAnimationFrame(() => runFlightLoop(serverResponse));
-    }
-}
-
-function resolveWinner(serverResponse) {
-    upgradeState = 'FINISHED';
-    let currencyName = isDemoMode ? "DEMO" : "GRAM";
-
-    drawFrame(WORLD_SIZE / 2, WORLD_SIZE / 2, 1.0);
-    updateBalance(serverResponse.new_balance);
-
-    if (serverResponse.is_win) {
-        showToast(`Победа! +${serverResponse.win_amount} ${currencyName}`, true);
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    } else {
-        showToast(`Шайба у бота.`, false);
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
-    }
-    setTimeout(resetUpgradeVisuals, 2500);
-}
-
-export function resetUpgradeVisuals() {
-    upgradeState = 'IDLE';
-    currentZoom = 1.0; cameraX = WORLD_SIZE / 2; cameraY = WORLD_SIZE / 2;
-    upgradePuck.x = WORLD_SIZE / 2; upgradePuck.y = WORLD_SIZE / 2; upgradePuck.trail = [];
-    
-    if (upgradeChanceRange) upgradeChanceRange.disabled = false;
-    if (upgradeBetInput) upgradeBetInput.disabled = false;
-    if (upgradeActionBtn) {
-        upgradeActionBtn.innerText = "Сделать ставку";
-        upgradeActionBtn.style.background = "linear-gradient(135deg, #00f2fe, #4facfe)";
-        upgradeActionBtn.disabled = false;
-    }
-    redraw();
 }
