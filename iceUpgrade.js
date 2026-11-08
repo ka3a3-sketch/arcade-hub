@@ -18,7 +18,7 @@ const WORLD_SIZE = 800;
 const S_TOTAL = WORLD_SIZE * WORLD_SIZE;
 
 // Физика и состояние шайбы
-let upgradePuck = { x: 0, y: 0, radius: 26, trail: [] };
+let upgradePuck = { x: -1000, y: -1000, radius: 26, trail: [] }; // Скрыта по умолчанию
 let upgradeAnimId = null;
 
 // Камера и эффекты
@@ -237,7 +237,7 @@ function runGameLoop(serverResponse) {
     let targetCamX = WORLD_SIZE / 2;
     let targetCamY = WORLD_SIZE / 2;
     let targetCamZoom = 1.0;
-    let arrowAngle = 0;
+    let arrowAngle = null;
 
     if (upgradeState === 'AIMING') {
         let elapsed = performance.now() - aimStartTime;
@@ -423,6 +423,7 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0, arrowAngle = null) 
             }
         }
 
+        // Если прицеливаемся - рисуем новую кибер-стрелку
         if (upgradeState === 'AIMING' && arrowAngle !== null) {
             drawAimSpinner(upgradePuck.x, upgradePuck.y, upgradePuck.radius, arrowAngle);
         }
@@ -434,27 +435,43 @@ function drawFrame(targetCamX, targetCamY, targetZoom = 1.0, arrowAngle = null) 
     upgradeCtx.restore(); 
 }
 
+// НОВЫЙ AIM SPINNER (Кибер-стрелка с правильным направлением)
 function drawAimSpinner(x, y, r, angle) {
     upgradeCtx.save();
+    
     upgradeCtx.translate(x, y);
-    upgradeCtx.rotate(angle);
+    upgradeCtx.rotate(angle); 
     
-    // Неоновая направляющая стрелка
-    upgradeCtx.shadowColor = '#00f2fe'; upgradeCtx.shadowBlur = 15;
-    upgradeCtx.fillStyle = '#00f2fe';
+    // Динамическая пульсация прозрачности
+    let pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150);
     
-    const offset = r + 15;
+    const offset = r + 12; 
+    const stemLength = 20; 
+    const headSize = 14;   
+    const tipX = offset + stemLength + 10; 
+
+    upgradeCtx.shadowColor = '#00f2fe'; 
+    upgradeCtx.shadowBlur = 15 * pulse; 
+    upgradeCtx.strokeStyle = `rgba(0, 242, 254, ${pulse})`;
+    upgradeCtx.lineWidth = 4;
+    upgradeCtx.lineCap = 'round';
+    upgradeCtx.lineJoin = 'round';
+
     upgradeCtx.beginPath();
     upgradeCtx.moveTo(offset, 0);
-    upgradeCtx.lineTo(offset + 25, -10);
-    upgradeCtx.lineTo(offset + 25, 10);
-    upgradeCtx.fill();
+    upgradeCtx.lineTo(offset + stemLength, 0);
+    upgradeCtx.stroke();
 
-    // Орбита
     upgradeCtx.beginPath();
-    upgradeCtx.arc(0, 0, offset - 5, 0, Math.PI * 2);
-    upgradeCtx.strokeStyle = 'rgba(0, 242, 254, 0.3)';
+    upgradeCtx.moveTo(offset + stemLength - 4, -headSize); 
+    upgradeCtx.lineTo(tipX, 0);                            
+    upgradeCtx.lineTo(offset + stemLength - 4, headSize);  
+    upgradeCtx.stroke();
+
+    upgradeCtx.beginPath();
+    upgradeCtx.arc(0, 0, tipX + 10, -Math.PI / 6, Math.PI / 6);
     upgradeCtx.lineWidth = 2;
+    upgradeCtx.strokeStyle = `rgba(0, 242, 254, ${pulse * 0.5})`;
     upgradeCtx.stroke();
     
     upgradeCtx.restore();
