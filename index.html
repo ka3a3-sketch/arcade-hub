@@ -1,3 +1,5 @@
+<!-- --- START OF FILE index.html --- -->
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -8,12 +10,14 @@
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <style>
         :root {
-            --bg-color: #070913;
-            --card-bg: rgba(18, 24, 41, 0.7);
+            --bg-color: #050914;
+            --card-bg: rgba(18, 26, 38, 0.75);
             --border-color: rgba(255, 255, 255, 0.08);
             --accent-blue: #38bdf8;
             --accent-green: #10b981;
             --accent-gold: #fbbf24;
+            --neon-cyan: #00f2fe;
+            --neon-amber: #ffaa00;
             --text-main: #f8fafc;
             --text-sec: #94a3b8;
         }
@@ -23,8 +27,8 @@
         body {
             background-color: var(--bg-color);
             background-image: 
-                radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 40%);
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 170, 0, 0.05) 0%, transparent 40%);
             color: var(--text-main);
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
             margin: 0;
@@ -38,165 +42,115 @@
             overflow: hidden; 
         }
 
+        /* --- ОБЩИЕ СТИЛИ И УВЕДОМЛЕНИЯ --- */
         #toast-container {
-            position: fixed;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            width: 90%;
-            max-width: 380px;
-            pointer-events: none;
+            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 9999; display: flex; flex-direction: column; gap: 8px;
+            width: 90%; max-width: 380px; pointer-events: none;
         }
         .toast-msg {
-            background: rgba(239, 68, 68, 0.85);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            color: #fff;
-            padding: 12px 16px;
-            border-radius: 16px;
-            font-size: 13px;
-            font-weight: 700;
-            text-align: center;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-            opacity: 0;
-            transform: translateY(-20px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
+            background: rgba(239, 68, 68, 0.85); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15); color: #fff;
+            padding: 12px 16px; border-radius: 16px; font-size: 13px; font-weight: 700;
+            text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            opacity: 0; transform: translateY(-20px); transition: opacity 0.3s ease, transform 0.3s ease;
             pointer-events: auto;
         }
-        .toast-msg.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        .toast-msg.success {
-            background: rgba(16, 185, 129, 0.85);
-        }
+        .toast-msg.show { opacity: 1; transform: translateY(0); }
+        .toast-msg.success { background: rgba(16, 185, 129, 0.85); }
 
+        /* --- ВЕРХНЯЯ ПАНЕЛЬ --- */
         .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            max-width: 420px;
-            flex-shrink: 0;
-            margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            width: 100%; max-width: 420px; flex-shrink: 0; margin-bottom: 8px;
         }
         .profile-badge {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border-color);
-            border-radius: 30px;
-            padding: 4px 12px 4px 4px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            color: #cbd5e1;
+            background: var(--card-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 30px;
+            padding: 4px 12px 4px 4px; display: flex; align-items: center; gap: 8px;
+            font-size: 13px; font-weight: 600; color: #cbd5e1;
         }
         .profile-avatar {
-            width: 32px; height: 32px;
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 12px; color: #fff; font-weight: 700;
+            width: 32px; height: 32px; background: linear-gradient(135deg, #00f2fe, #4facfe);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; color: #fff; font-weight: 700; box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
         }
         .stars-badge {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            border-radius: 30px;
-            padding: 6px 14px;
-            display: flex; align-items: center; gap: 6px;
-            font-weight: 700; font-size: 14px;
-            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);
+            background: var(--card-bg); backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 30px;
+            padding: 6px 14px; display: flex; align-items: center; gap: 6px;
+            font-weight: 700; font-size: 14px; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);
         }
         .stars-badge span { color: var(--accent-blue); }
         .plus-btn {
             background: var(--accent-blue); color: #000;
-            border-radius: 50%; width: 20px; height: 20px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 14px; font-weight: 900; cursor: pointer;
-            margin-left: 2px; transition: transform 0.1s;
+            border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 900; cursor: pointer; margin-left: 2px; transition: transform 0.1s;
         }
         .plus-btn:active { transform: scale(0.9); }
 
+        /* --- ЭКРАНЫ И НАВИГАЦИЯ --- */
         .screen { 
-            width: 100%; max-width: 420px; 
-            flex-grow: 1; display: none; 
-            flex-direction: column; 
-            overflow-y: auto; 
-            padding-bottom: 10px;
-            scrollbar-width: none;
+            width: 100%; max-width: 420px; flex-grow: 1; display: none; 
+            flex-direction: column; overflow-y: auto; padding-bottom: 10px; scrollbar-width: none;
         }
         .screen::-webkit-scrollbar { display: none; }
         .screen.active { display: flex !important; }
 
-        .menu-title { 
-            font-size: 24px; font-weight: 800; 
-            margin: 4px 0 14px 4px; 
-            letter-spacing: -0.5px;
+        .menu-title { font-size: 24px; font-weight: 800; margin: 4px 0 14px 4px; letter-spacing: -0.5px; }
+
+        /* --- DARK NEON FROST СТИЛИ (НОВОЕ) --- */
+        .glass-panel {
+            background: var(--card-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border-radius: 20px; padding: 12px;
+        }
+        .upgrade-stats-row {
+            display: flex; justify-content: space-between; 
+            font-size: 13px; font-weight: 800; color: var(--text-sec); 
+            margin-bottom: 8px; padding: 0 4px;
+        }
+        .upgrade-stats-row .cyan-text { color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0, 242, 254, 0.4); }
+        .upgrade-stats-row .amber-text { color: var(--neon-amber); text-shadow: 0 0 8px rgba(255, 170, 0, 0.4); }
+
+        input[type=range].neon-slider { -webkit-appearance: none; width: 100%; background: transparent; margin: 10px 0; }
+        input[type=range].neon-slider::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        input[type=range].neon-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%;
+            background: var(--neon-cyan); box-shadow: 0 0 12px var(--neon-cyan);
+            margin-top: -8px; cursor: pointer; border: 2px solid #fff;
         }
 
+        /* --- КАРТОЧКИ ИГР --- */
         .card-banner {
-            border-radius: 24px; padding: 20px; 
-            display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 12px; cursor: pointer; position: relative; overflow: hidden; 
-            flex-shrink: 0; backdrop-filter: blur(10px);
-            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 24px; padding: 20px; display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 12px; cursor: pointer; position: relative; overflow: hidden; flex-shrink: 0; 
+            backdrop-filter: blur(10px); transition: transform 0.2s, box-shadow 0.2s;
         }
         .card-banner:active { transform: scale(0.98); }
-
         .games-row-2, .games-row-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
-
         .card-box {
-            border-radius: 24px; padding: 16px; 
-            display: flex; flex-direction: column; justify-content: space-between; 
-            cursor: pointer; min-height: 145px; position: relative; overflow: hidden;
-            backdrop-filter: blur(10px);
+            border-radius: 24px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; 
+            cursor: pointer; min-height: 145px; position: relative; overflow: hidden; backdrop-filter: blur(10px);
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .card-box:active { transform: scale(0.96); }
         
-        .card-box.escape { 
-            background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 90%); 
-            border: 1.5px solid #3b82f6; 
-            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
-        }
-        .card-box.mines { 
-            background: linear-gradient(135deg, #581c87 0%, #0f172a 90%); 
-            border: 1.5px solid #a855f7; 
-            box-shadow: 0 8px 25px rgba(168, 85, 247, 0.15);
-        }
-        .card-box.upgrade { 
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); 
-            border: 1px solid rgba(16, 185, 129, 0.35); 
-        }
-        .card-box.slots { 
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); 
-            border: 1px solid rgba(239, 68, 68, 0.35); 
-        }
+        .card-box.escape { background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 90%); border: 1.5px solid #3b82f6; box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15); }
+        .card-box.mines { background: linear-gradient(135deg, #581c87 0%, #0f172a 90%); border: 1.5px solid #a855f7; box-shadow: 0 8px 25px rgba(168, 85, 247, 0.15); }
+        .card-box.upgrade { background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(16, 185, 129, 0.35); }
+        .card-box.slots { background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(239, 68, 68, 0.35); }
 
         .card-content { position: relative; z-index: 2; width: 100%; }
         .card-content h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
         .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
         .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 14px; display: inline-block; }
-        
-        .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-        .escape-canvas-wrap { 
-            position: relative; 
-            width: 100%; 
-            max-width: 360px; 
-            aspect-ratio: 1 / 1; 
-            margin: 0 auto 12px auto; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-        }
 
+        /* --- ИНТЕРФЕЙС ИГР --- */
+        .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
+        .escape-canvas-wrap { position: relative; width: 100%; max-width: 360px; aspect-ratio: 1 / 1; margin: 0 auto 12px auto; display: flex; align-items: center; justify-content: center; }
         .escape-outcomes { display: flex; justify-content: space-between; width: 100%; max-width: 300px; margin: 0 auto 8px auto; padding: 0 10px; font-size: 13px; font-weight: 700; color: #64748b; }
         .escape-status-bar { width: 100%; height: 8px; border-radius: 4px; display: flex; overflow: hidden; margin-bottom: 12px; background: #1e293b; }
         .status-green { background: var(--accent-green); flex: 1; }
@@ -204,107 +158,46 @@
 
         .control-panel { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; margin: 0 auto; }
         .presets-row { display: flex; gap: 6px; justify-content: center; }
-        .preset-btn { 
-            background: var(--card-bg); border: 1px solid var(--border-color); 
-            color: #cbd5e1; padding: 10px; border-radius: 14px; 
-            font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; 
-        }
+        .preset-btn { background: var(--card-bg); border: 1px solid var(--border-color); color: #cbd5e1; padding: 10px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; }
         .actions-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
-        .pill-box { 
-            background: var(--card-bg); border: 1px solid var(--border-color); 
-            border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; 
-            gap: 6px; font-size: 12px; font-weight: 700; flex: 1; justify-content: center; color: var(--text-sec); 
-        }
+        .pill-box { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; flex: 1; justify-content: center; color: var(--text-sec); }
         .pill-box input { background: transparent; border: none; color: #fff; font-size: 15px; font-weight: 800; width: 70px; text-align: center; outline: none; }
+        .main-action-btn { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; width: 100%; padding: 14px; border-radius: 18px; font-size: 15px; font-weight: 800; cursor: pointer; text-align: center; box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3); }
+        .back-btn { background: var(--card-bg); color: #cbd5e1; border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; align-self: flex-start; margin-bottom: 6px; }
 
-        .currency-tabs { display: flex; background: var(--card-bg); border-radius: 16px; padding: 3px; gap: 3px; border: 1px solid var(--border-color); }
-        .curr-tab { flex: 1; background: transparent; border: none; color: var(--text-sec); padding: 6px; font-size: 12px; font-weight: 700; border-radius: 13px; cursor: pointer; text-align: center; }
-        .curr-tab.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
-
-        .main-action-btn { 
-            background: linear-gradient(135deg, #10b981, #059669); color: white; 
-            border: none; width: 100%; padding: 14px; border-radius: 18px; 
-            font-size: 15px; font-weight: 800; cursor: pointer; text-align: center; 
-            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-        }
-        .back-btn { 
-            background: var(--card-bg); color: #cbd5e1; border: 1px solid var(--border-color); 
-            padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; 
-            cursor: pointer; align-self: flex-start; margin-bottom: 6px; 
-        }
-
+        /* МИНЫ */
         .grid-container { width: 100%; max-width: 300px; margin: 0 auto 6px auto; }
         .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
-        .cell { 
-            aspect-ratio: 1; background: var(--card-bg); border: 1px solid var(--border-color); 
-            border-radius: 14px; display: flex; align-items: center; justify-content: center; 
-            font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; 
-        }
+        .cell { aspect-ratio: 1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; }
         .cell.safe { background: rgba(6, 78, 59, 0.8); border-color: var(--accent-green); color: var(--accent-green); }
         .cell.mine { background: rgba(127, 29, 29, 0.9); border-color: #ef4444; color: #ef4444; }
-        
-        .mines-info-bar { 
-            display: flex; justify-content: space-between; width: 100%; max-width: 380px; 
-            margin: 0 auto 8px auto; background: var(--card-bg); border: 1px solid var(--border-color); 
-            padding: 8px 14px; border-radius: 14px; font-size: 12px; font-weight: 700; 
-        }
+        .mines-info-bar { display: flex; justify-content: space-between; width: 100%; max-width: 380px; margin: 0 auto 8px auto; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 14px; font-size: 12px; font-weight: 700; }
         .mines-info-bar span { color: var(--accent-blue); }
 
-        .profile-header-card { 
-            background: var(--card-bg); border: 1px solid var(--border-color); 
-            border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; 
-        }
-        .profile-avatar-large { 
-            width: 50px; height: 50px; border-radius: 50%; 
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8); 
-            display: flex; align-items: center; justify-content: center; 
-            font-size: 18px; font-weight: 800; color: #fff; 
-        }
+        /* --- ПРОФИЛЬ И НАСТРОЙКИ --- */
+        .profile-header-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .profile-avatar-large { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #00f2fe, #4facfe); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; box-shadow: 0 0 15px rgba(0, 242, 254, 0.4); }
         .profile-user-info h3 { margin: 0 0 2px 0; font-size: 16px; font-weight: 700; }
         .profile-user-info p { margin: 0; font-size: 12px; color: var(--text-sec); }
 
-        .ref-card, .settings-card { 
-            background: var(--card-bg); border: 1px solid var(--border-color); 
-            border-radius: 20px; padding: 16px; margin-bottom: 12px; 
-        }
+        .ref-card, .settings-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px; padding: 16px; margin-bottom: 12px; }
         .ref-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
         .ref-subtitle { font-size: 12px; color: var(--text-sec); margin-bottom: 12px; }
-        
-        .ref-link-box { 
-            background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); 
-            border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; 
-        }
+        .ref-link-box { background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
         .ref-link-box input { background: transparent; border: none; color: var(--text-sec); font-size: 11px; width: 100%; outline: none; }
-        .ref-share-btn { 
-            background: var(--accent-blue); color: #000; border-radius: 50%; 
-            width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; 
-            font-size: 14px; font-weight: bold; cursor: pointer; border: none; 
-        }
-        
+        .ref-share-btn { background: var(--accent-blue); color: #000; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; cursor: pointer; border: none; }
         .ref-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .ref-stat-box h4 { margin: 0 0 2px 0; font-size: 18px; font-weight: 800; }
         .ref-stat-box p { margin: 0; font-size: 11px; color: var(--text-sec); }
-        .ref-claim-btn { 
-            background: #14b8a6; color: #060913; border: none; width: 100%; 
-            padding: 12px; border-radius: 14px; font-size: 14px; font-weight: 800; cursor: pointer; text-align: center; 
-        }
+        .ref-claim-btn { background: #14b8a6; color: #060913; border: none; width: 100%; padding: 12px; border-radius: 14px; font-size: 14px; font-weight: 800; cursor: pointer; text-align: center; }
 
         .cashback-top h4 { margin: 0; font-size: 15px; font-weight: 700; }
         .cashback-top p { margin: 2px 0 0 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
         .cashback-amount { font-size: 13px; font-weight: 700; margin: 10px 0; }
         .cashback-amount span { display: block; font-size: 11px; color: var(--text-sec); font-weight: normal; }
-        .cashback-btn { 
-            background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); 
-            color: var(--accent-gold); width: 100%; padding: 10px; border-radius: 14px; 
-            font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; 
-        }
+        .cashback-btn { background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); color: var(--accent-gold); width: 100%; padding: 10px; border-radius: 14px; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
         
-        .settings-item-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); 
-            padding: 10px 14px; border-radius: 14px; margin-top: 8px; cursor: pointer; font-size: 13px; font-weight: 600; 
-        }
-        
+        .settings-item-row { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 14px; margin-top: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
         .switch { position: relative; display: inline-block; width: 42px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 24px; }
@@ -312,6 +205,7 @@
         input:checked + .slider { background-color: var(--accent-green); }
         input:checked + .slider:before { transform: translateX(18px); }
 
+        /* --- МЕНЮ НАВИГАЦИИ --- */
         .nav-bar { 
             background: rgba(13, 18, 32, 0.85); backdrop-filter: blur(16px); 
             border: 1px solid var(--border-color); border-radius: 24px; 
@@ -347,11 +241,11 @@
     <div id="screen-games" class="screen active">
         <div class="menu-title">Arcade Hub</div>
 
-        <div class="card-banner upgrade-ice" onclick="openGame('iceUpgrade')" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(234, 179, 8, 0.4); box-shadow: 0 8px 30px rgba(234, 179, 8, 0.15); margin-bottom: 12px;">
+        <div class="card-banner upgrade-ice" onclick="openGame('iceUpgrade')" style="background: linear-gradient(135deg, rgba(0, 242, 254, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(0, 242, 254, 0.4); box-shadow: 0 8px 30px rgba(0, 242, 254, 0.15); margin-bottom: 12px;">
             <div class="card-content">
                 <h3>ICE UPGRADE</h3>
                 <p>Выбирай шанс, крути шайбу и умножай GRAM</p>
-                <span class="card-link">Играть &rarr;</span>
+                <span class="card-link" style="color: var(--neon-cyan);">Играть &rarr;</span>
             </div>
         </div>
 
@@ -391,43 +285,44 @@
         </div>
     </div>
 
-    <!-- ЭКРАН: ICE UPGRADE -->
+    <!-- ЭКРАН 2: ICE UPGRADE (НОВЫЙ ДИЗАЙН DARK NEON FROST) -->
     <div id="screen-iceUpgrade" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="menu-title" style="font-size: 18px; margin-bottom: 6px; text-align: center;">ICE UPGRADE</div>
         
         <div class="escape-container">
-            <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #0b1120; border-radius: 28px; border: 2px solid rgba(234, 179, 8, 0.4); overflow: hidden; position: relative; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.7);">
+            <!-- Неоновая рамка для Canvas -->
+            <div id="upgradeCanvasWrap" style="width: 90vw; max-width: 380px; aspect-ratio: 1 / 1; background: #080E18; border-radius: 28px; border: 2px solid rgba(0, 242, 254, 0.3); box-shadow: 0 0 25px rgba(0, 242, 254, 0.15); overflow: hidden; position: relative; margin: 0 auto;">
                 <canvas id="upgradeCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
             </div>
             
-            <div style="width: 90vw; max-width: 380px; margin: 12px 0 4px 0;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-sec); margin-bottom: 4px;">
-                    <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">50</span>%</span>
-                    <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.96x</span></span>
+            <div class="glass-panel" style="width: 90vw; max-width: 380px; margin: 12px 0 4px 0;">
+                <div class="upgrade-stats-row">
+                    <span>Шанс: <span id="upgradeChanceVal" class="cyan-text">50</span>%</span>
+                    <span>Множитель: <span id="upgradeMultVal" class="amber-text">1.96x</span></span>
                 </div>
-                <input type="range" id="upgradeChanceRange" min="30" max="75" value="50" step="1" style="width: 100%; cursor: pointer;" oninput="updateUpgradeChance(this.value)">
+                <input type="range" id="upgradeChanceRange" class="neon-slider" min="30" max="75" value="50" step="1" oninput="updateUpgradeChance(this.value)">
             </div>
         </div>
 
-        <div class="control-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
+        <div class="control-panel glass-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
             <div class="presets-row">
                 <button class="preset-btn" onclick="multiplyUpgradeBet(0.5)">/2</button>
                 <button class="preset-btn" onclick="multiplyUpgradeBet(2)">x2</button>
                 <button class="preset-btn" onclick="maxUpgradeBet()">Max</button>
             </div>
             <div class="actions-row">
-                <div class="pill-box" style="width: 100%;">
+                <div class="pill-box" style="width: 100%; background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1);">
                     <span>СТАВКА</span>
-                    <input type="number" id="upgradeBetInput" value="0.25" min="0.25" max="2.0" step="0.25">
+                    <input type="number" id="upgradeBetInput" value="0.25" min="0.25" max="2.0" step="0.25" style="color: var(--neon-cyan); text-shadow: 0 0 5px rgba(0,242,254,0.5);">
                     <span>GRAM</span>
                 </div>
             </div>
-            <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()" style="background: linear-gradient(135deg, #10b981, #059669);">Сделать ставку</button>
+            <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()" style="background: linear-gradient(135deg, #00f2fe, #4facfe); box-shadow: 0 6px 20px rgba(0, 242, 254, 0.3); color: #000;">Сделать ставку</button>
         </div>
     </div>
 
-    <!-- ESCAPE -->
+    <!-- ЭКРАН 3: ESCAPE -->
     <div id="screen-escape" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="escape-container">
@@ -435,23 +330,23 @@
             <div class="escape-outcomes"><span>WIN</span><span>CRASH</span></div>
             <div class="escape-status-bar"><div class="status-green"></div><div class="status-red"></div></div>
         </div>
-        <div class="control-panel">
-            <div class="currency-tabs">
-                <button class="curr-tab active">БАЛАНС</button>
-            </div>
+        <div class="control-panel glass-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
             <div class="presets-row">
                 <button class="preset-btn" onclick="multiplyEscapeBet(0.5)">/2</button>
                 <button class="preset-btn" onclick="multiplyEscapeBet(2)">x2</button>
                 <button class="preset-btn" onclick="maxEscapeBet()">Max</button>
             </div>
             <div class="actions-row">
-                <div class="pill-box"><input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25"><span>СТАВКА</span></div>
+                <div class="pill-box" style="width: 100%; background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.1);">
+                    <input type="number" id="escapeBetInput" value="0.25" min="0.25" step="0.25">
+                    <span>СТАВКА</span>
+                </div>
             </div>
             <button class="main-action-btn" id="escapeActionBtn" onclick="startEscapeGame()">Играть</button>
         </div>
     </div>
 
-    <!-- МИНЫ -->
+    <!-- ЭКРАН 4: МИНЫ -->
     <div id="screen-mines" class="screen">
         <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
         <div class="mines-info-bar">
@@ -459,7 +354,7 @@
             <div>Выигрыш: <span id="minesWinAmount">0.00</span></div>
         </div>
         <div class="grid-container"><div class="grid" id="grid"></div></div>
-        <div class="control-panel">
+        <div class="control-panel glass-panel" style="margin-top: 4px; width: 90vw; max-width: 380px;">
             <div class="presets-row">
                 <button class="preset-btn" onclick="setBetPercent(0.25)">25%</button>
                 <button class="preset-btn" onclick="setBetPercent(0.5)">50%</button>
@@ -467,8 +362,8 @@
                 <button class="preset-btn" onclick="multiplyBet(2)">2x</button>
             </div>
             <div class="actions-row">
-                <div class="pill-box"><span>СТАВКА</span><input type="number" id="betInput" value="0.25" min="0.25" step="0.25"></div>
-                <div class="pill-box"><span>МИНЫ</span><input type="number" id="minesInput" value="3" min="1" max="24"></div>
+                <div class="pill-box" style="background: rgba(0,0,0,0.4);"><span>СТАВКА</span><input type="number" id="betInput" value="0.25" min="0.25" step="0.25"></div>
+                <div class="pill-box" style="background: rgba(0,0,0,0.4);"><span>МИНЫ</span><input type="number" id="minesInput" value="3" min="1" max="24"></div>
             </div>
             <button class="main-action-btn" id="actionBtn" onclick="startGame()">Сделать ставку</button>
         </div>
@@ -478,7 +373,7 @@
     <div id="screen-inventory" class="screen"><div class="menu-title">Инвентарь</div><p style="color:var(--text-sec);">Ваши бустеры и кейсы.</p></div>
     <div id="screen-leaders" class="screen"><div class="menu-title">Лидеры</div><p style="color:var(--text-sec);">Топ игроков по балансу GRAM.</p></div>
     
-    <!-- ПРОФИЛЬ -->
+    <!-- ЭКРАН 5: ПРОФИЛЬ -->
     <div id="screen-profile" class="screen">
         <div class="menu-title">Профиль</div>
         <div class="profile-header-card">
@@ -529,8 +424,9 @@
         </div>
     </div>
 
-    <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(7,9,19,0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
-        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:24px; padding:20px; width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
+    <!-- МОДАЛКА ОПЛАТЫ -->
+    <div id="depositModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(5, 9, 20, 0.85); backdrop-filter:blur(10px); z-index:1000; justify-content:center; align-items:center; padding:20px;">
+        <div class="glass-panel" style="width:100%; max-width:360px; display:flex; flex-direction:column; gap:16px; text-align:center;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0; font-size:18px;">Пополнение GRAM</h3>
                 <span onclick="closeDepositModal()" style="font-size:22px; cursor:pointer; color:var(--text-sec);">&times;</span>
@@ -543,7 +439,7 @@
                 <button class="preset-btn" onclick="selectDepositTon(10.0)">10 GRAM</button>
                 <button class="preset-btn" onclick="selectDepositTon(50.0)">50 GRAM</button>
             </div>
-            <div class="pill-box" style="width:100%;">
+            <div class="pill-box" style="width:100%; background: rgba(0,0,0,0.4);">
                 <span>GRAM</span>
                 <input type="number" id="customTonInput" value="1.0" min="0.1" step="0.1">
                 <span>СУММА</span>
@@ -552,6 +448,7 @@
         </div>
     </div>
 
+    <!-- НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ -->
     <div class="nav-bar">
         <button class="nav-item active" onclick="switchNav('games', this)">
             <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-4c-.83 0-1.5-.67-1.5-1.5S17.67 8 18.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
@@ -575,6 +472,6 @@
         </button>
     </div>
 
-    <script type="module" src="./main.js?v=2028"></script>
+    <script type="module" src="./main.js?v=2029"></script>
 </body>
 </html>
