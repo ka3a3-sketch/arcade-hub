@@ -35,7 +35,6 @@ let sparks = [];
 let finalBalanceCache = 0;
 let floatingText = { active: false, txt: "", color: "", y: 0, alpha: 1 };
 
-// Обновление отображения баланса при переключении демо
 export function updateEscapeBalanceUI() {
     if (escapeBalanceDisplay) {
         let currency = isDemoMode ? "DEMO" : "GRAM";
@@ -85,52 +84,53 @@ window.startEscapeGame = async function() {
         escapeActionBtn.disabled = true;
     }
 
-    let response = await apiCall('/api/escape/play', { bet: currentBetAmount, is_demo: isDemoMode });
-    
-    if (!response || response.error) {
-        showToast(response?.error || "Ошибка соединения", false);
-        if (escapeActionBtn) {
-            escapeActionBtn.innerText = "Сделать ставку";
-            escapeActionBtn.style.background = "linear-gradient(135deg, #00f2fe, #4facfe)";
-            escapeActionBtn.disabled = false;
+    try {
+        let response = await apiCall('/api/escape/play', { bet: currentBetAmount, is_demo: isDemoMode });
+        
+        if (!response || response.error) {
+            showToast(response?.error || "Ошибка соединения", false);
+            resetToMenuBtn();
+            return;
         }
-        return;
+
+        serverTargetMultiplier = response.multiplier;
+        serverIsWin = response.is_win;
+        serverWinAmount = response.win_amount;
+        targetBounces = Math.round(serverTargetMultiplier / 0.10); 
+        finalBalanceCache = response.new_balance - serverWinAmount; 
+
+        updateBalance(finalBalanceCache); 
+        updateEscapeBalanceUI();
+        addCashback(currentBetAmount * 0.15);
+
+        escapeState = 'PLAYING';
+        escapeMultiplier = 0.00;
+        bounceCount = 0;
+        trail = []; sparks = []; floatingText.active = false;
+        
+        if (escapeActionBtn) escapeActionBtn.innerText = "В игре...";
+
+        ball.x = CX; ball.y = CY;
+        let angle = Math.random() * Math.PI * 2;
+        let speed = 6.0;
+        ball.vx = Math.cos(angle) * speed;
+        ball.vy = Math.sin(angle) * speed;
+
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+        cancelAnimationFrame(escapeAnimId);
+        runEscapeLoop();
+
+    } catch (e) {
+        showToast("Сервер не отвечает", false);
+        resetToMenuBtn();
     }
-
-    serverTargetMultiplier = response.multiplier;
-    serverIsWin = response.is_win;
-    serverWinAmount = response.win_amount;
-    targetBounces = Math.round(serverTargetMultiplier / 0.10); // Считаем сколько отскоков нужно
-    finalBalanceCache = response.new_balance - serverWinAmount; // Спишем ставку
-
-    updateBalance(finalBalanceCache); 
-    updateEscapeBalanceUI();
-    addCashback(currentBetAmount * 0.15);
-
-    escapeState = 'PLAYING';
-    escapeMultiplier = 0.00;
-    bounceCount = 0;
-    trail = []; sparks = []; floatingText.active = false;
-    
-    if (escapeActionBtn) escapeActionBtn.innerText = "В игре...";
-
-    ball.x = CX; ball.y = CY;
-    // Случайный начальный выстрел
-    let angle = Math.random() * Math.PI * 2;
-    let speed = 6.0;
-    ball.vx = Math.cos(angle) * speed;
-    ball.vy = Math.sin(angle) * speed;
-
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-    cancelAnimationFrame(escapeAnimId);
-    runEscapeLoop();
 };
 
 function runEscapeLoop() {
     if (escapeState === 'IDLE') return;
 
     if (escapeState === 'PLAYING') {
-        ringRotation += 0.03; // Вращение кольца для визуала
+        ringRotation += 0.03; 
 
         ball.x += ball.vx; 
         ball.y += ball.vy;
@@ -138,31 +138,22 @@ function runEscapeLoop() {
         let dx = ball.x - CX, dy = ball.y - CY;
         let dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Проверка столкновения с кольцом
         if (dist >= RING_RADIUS - BALL_RADIUS) {
             let impactAngle = Math.atan2(dy, dx);
             
-            // Если мы достигли нужного множителя — принудительно выпускаем шарик
             if (bounceCount >= targetBounces) {
-                // Выравниваем разрыв под шарик
                 ringRotation = impactAngle - GAP_ANGLE / 2;
-                
-                // Выталкиваем наружу
                 ball.x = CX + Math.cos(impactAngle) * (RING_RADIUS);
                 ball.y = CY + Math.sin(impactAngle) * (RING_RADIUS);
-                
-                // Переходим в падение
                 escapeState = 'FALLING';
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
             } else {
-                // Обычный отскок
                 let nx = dx / dist, ny = dy / dist;
                 let dot = ball.vx * nx + ball.vy * ny;
                 
                 ball.vx -= 2 * dot * nx; 
                 ball.vy -= 2 * dot * ny;
                 
-                // Защита от залипания
                 ball.x = CX + nx * (RING_RADIUS - BALL_RADIUS - 1); 
                 ball.y = CY + ny * (RING_RADIUS - BALL_RADIUS - 1);
 
@@ -174,16 +165,12 @@ function runEscapeLoop() {
             }
         }
     } else if (escapeState === 'FALLING') {
-        // Гравитация
         ball.vy += 0.25;
         
-        // Магнитное "сдувание" в нужную зону (лево/право)
         if (serverIsWin) {
-            // Летим направо (Зеленая зона)
             if (ball.x < CX + 40) ball.vx += 0.3;
-            else ball.vx *= 0.95; // тормозим по X
+            else ball.vx *= 0.95; 
         } else {
-            // Летим налево (Красная зона)
             if (ball.x > CX - 40) ball.vx -= 0.3;
             else ball.vx *= 0.95;
         }
@@ -191,24 +178,20 @@ function runEscapeLoop() {
         ball.x += ball.vx; 
         ball.y += ball.vy;
 
-        // Падение в зону
         if (ball.y > H - 50) {
             finishEscapeGame();
         }
     }
 
-    // Хвост шарика
     if (escapeState === 'PLAYING' || escapeState === 'FALLING') {
         trail.push({x: ball.x, y: ball.y, alpha: 1.0});
         if (trail.length > 15) trail.shift();
     }
     trail.forEach(t => t.alpha -= 0.06);
     
-    // Искры
     sparks.forEach(s => { s.x += s.vx; s.y += s.vy; s.life -= 0.05; });
     sparks = sparks.filter(s => s.life > 0);
 
-    // Всплывающий текст финала
     if (escapeState === 'RESULT' && floatingText.active) {
         floatingText.y -= 1;
         floatingText.alpha -= 0.015;
@@ -255,7 +238,6 @@ function finishEscapeGame() {
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
     }
     
-    // Начисляем финальный баланс
     updateBalance(finalBalanceCache + serverWinAmount);
     updateEscapeBalanceUI();
 }
@@ -272,10 +254,8 @@ function drawEscapeFrame() {
     if (!escapeCtx) return;
     escapeCtx.clearRect(0, 0, W, H);
     
-    // 1. Рисуем зоны внизу
     drawBottomZones();
 
-    // 2. Рисуем множитель по центру или вверху
     escapeCtx.fillStyle = '#ffffff';
     escapeCtx.font = '900 42px sans-serif'; 
     escapeCtx.textAlign = 'center'; 
@@ -285,13 +265,11 @@ function drawEscapeFrame() {
     escapeCtx.fillText(escapeMultiplier.toFixed(2) + 'x', CX, 45);
     escapeCtx.shadowBlur = 0;
 
-    // 3. Рисуем кольцо
     escapeCtx.save(); 
     escapeCtx.translate(CX, CY); 
     escapeCtx.rotate(ringRotation);
     
     escapeCtx.beginPath();
-    // Разрыв начинается от 0 до GAP_ANGLE (визуально сдвигаем чтобы центрировать)
     escapeCtx.arc(0, 0, RING_RADIUS, GAP_ANGLE, Math.PI * 2, false);
     
     escapeCtx.strokeStyle = '#00f2fe'; 
@@ -300,14 +278,12 @@ function drawEscapeFrame() {
     escapeCtx.shadowColor = '#00f2fe';
     escapeCtx.shadowBlur = 20;
     escapeCtx.stroke();
-    // Внутреннее белое свечение
     escapeCtx.strokeStyle = 'rgba(255,255,255,0.8)';
     escapeCtx.lineWidth = 2;
     escapeCtx.shadowBlur = 0;
     escapeCtx.stroke();
     escapeCtx.restore();
 
-    // 4. Рисуем хвост
     if (trail.length > 0) {
         escapeCtx.beginPath();
         escapeCtx.moveTo(trail[0].x, trail[0].y);
@@ -320,7 +296,6 @@ function drawEscapeFrame() {
         escapeCtx.stroke();
     }
 
-    // 5. Рисуем искры
     sparks.forEach(s => {
         escapeCtx.globalAlpha = s.life;
         escapeCtx.fillStyle = '#00f2fe';
@@ -330,7 +305,6 @@ function drawEscapeFrame() {
     });
     escapeCtx.globalAlpha = 1.0;
 
-    // 6. Рисуем шарик
     if (escapeState === 'PLAYING' || escapeState === 'FALLING') {
         escapeCtx.beginPath(); 
         escapeCtx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
@@ -341,7 +315,6 @@ function drawEscapeFrame() {
         escapeCtx.shadowBlur = 0;
     }
 
-    // 7. Всплывающий результат
     if (escapeState === 'RESULT' && floatingText.active) {
         escapeCtx.globalAlpha = Math.max(0, floatingText.alpha);
         escapeCtx.fillStyle = floatingText.color;
@@ -358,7 +331,6 @@ function drawEscapeFrame() {
 function drawBottomZones() {
     const ZONE_Y = H - 100;
     
-    // RED ZONE (Left)
     let redGrad = escapeCtx.createLinearGradient(0, ZONE_Y, 0, H);
     redGrad.addColorStop(0, 'rgba(239, 68, 68, 0.05)');
     redGrad.addColorStop(1, 'rgba(239, 68, 68, 0.4)');
@@ -374,7 +346,6 @@ function drawBottomZones() {
     escapeCtx.font = 'bold 12px sans-serif';
     escapeCtx.fillText('LOSE', CX / 2, ZONE_Y + 60);
 
-    // GREEN ZONE (Right)
     let greenGrad = escapeCtx.createLinearGradient(CX, ZONE_Y, CX, H);
     greenGrad.addColorStop(0, 'rgba(16, 185, 129, 0.05)');
     greenGrad.addColorStop(1, 'rgba(16, 185, 129, 0.4)');
@@ -390,7 +361,6 @@ function drawBottomZones() {
     escapeCtx.font = 'bold 12px sans-serif';
     escapeCtx.fillText('WIN', CX + CX / 2, ZONE_Y + 60);
 
-    // Разделитель
     escapeCtx.beginPath(); escapeCtx.moveTo(CX, ZONE_Y); escapeCtx.lineTo(CX, H);
     escapeCtx.strokeStyle = 'rgba(255,255,255,0.1)'; escapeCtx.lineWidth = 2; escapeCtx.stroke();
 }
