@@ -1,8 +1,8 @@
 export let tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 if (tg) { tg.expand(); }
 
-// Адрес нашего локального API-сервера (Python)
-export const API_BASE_URL = "http://127.0.0.1:8081";
+// Адрес нашего локального API-сервера (проброшенный через localhost.run)
+export const API_BASE_URL = "https://c4a833770814b9.lhr.life";
 
 export let userName = "Игрок";
 export let userHandle = "@username";
@@ -48,7 +48,7 @@ export async function syncBalance() {
         let response = await fetch(`${API_BASE_URL}/api/balance`, {
             method: 'GET',
             headers: {
-                'Authorization': tg.initData // Отправляем зашифрованные данные для проверки
+                'Authorization': tg.initData
             }
         });
         if (response.ok) {
@@ -82,8 +82,8 @@ export function showToast(text, isSuccess = false) {
     }, 3000);
 }
 
-// Пока игры еще работают на клиенте, мы обновляем переменную локально
-// Но на ЭТАПЕ 3 мы переделаем это так, чтобы счет менялся только через сервер
+// Эта функция теперь просто обновляет локальную переменную и UI, 
+// потому что сам баланс пересчитывается сервером
 export function updateBalance(newScore) {
     if (newScore !== undefined) {
         score = newScore;

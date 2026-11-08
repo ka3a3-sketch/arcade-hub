@@ -3,27 +3,37 @@ import hmac
 import hashlib
 import json
 import logging
+import random
+import asyncio
 from urllib.parse import parse_qsl
 import aiosqlite
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import MenuButtonWebApp, WebAppInfo
 
-# 1. БЕЗОПАСНОСТЬ: Токен берем из переменных окружения
-# Для локального запуска задай его в консоли: export BOT_TOKEN="твой_токен"
 TOKEN = os.getenv("BOT_TOKEN", "9015659427:AAEHv6oruPJswEq_q4_F0999F_ixYtIz538")
 GAME_URL = "https://ka3a3-sketch.github.io/arcade-hub/"
 WEB_SERVER_HOST = "127.0.0.1"
-WEB_SERVER_PORT = 8081  # ИЗМЕНЕНО: используем порт 8081, так как 8000 занят
+WEB_SERVER_PORT = 8081
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- БАЗА ДАННЫХ (Персистентная) ---
+active_mines_games = {}
+
+# --- СОСТОЯНИЕ АРЕНЫ ---
+arena_state = 'WAITING' # WAITING, SPINNING
+arena_players = []
+arena_timer = 15
+arena_connections = set()
+BOT_NAMES = ["CryptoKing", "LuckyJoe", "TonMaster", "GramWinner", "MoonHodler", "BitSniper"]
+
+# --- БАЗА ДАННЫХ ---
 async def init_db():
     async with aiosqlite.connect("database.db") as db:
         await db.execute("""
@@ -38,11 +48,8 @@ async def init_db():
 
 async def get_user(user_id):
     async with aiosqlite.connect("database.db") as db:
-        # Безопасная вставка: если юзер уже есть, ошибка не выскочит
         await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
-        
-        # После этого гарантированно можем получить его данные
         async with db.execute("SELECT balance, demo_balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             return {"balance": row[0], "demo_balance": row[1]}
@@ -52,49 +59,255 @@ async def update_balance(user_id, amount, is_demo=False):
     async with aiosqlite.connect("database.db") as db:
         await db.execute(f"UPDATE users SET {column} = {column} + ? WHERE user_id = ?", (amount, user_id))
         await db.commit()
+        async with db.execute(f"SELECT {column} FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0]
 
-# --- ВАЛИДАЦИЯ TELEGRAM INIT DATA ---
+# --- ВАЛИДАЦИЯ ---
 def validate_telegram_data(init_data: str) -> dict:
-    """Проверяет криптографическую подпись данных от WebApp"""
     try:
         parsed_data = dict(parse_qsl(init_data))
-        if "hash" not in parsed_data:
-            return None
-            
+        if "hash" not in parsed_data: return None
         hash_received = parsed_data.pop("hash")
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items()))
-        
         secret_key = hmac.new(b"WebAppData", TOKEN.encode(), hashlib.sha256).digest()
         hash_calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-        
         if hash_calculated == hash_received:
             return json.loads(parsed_data.get("user", "{}"))
         return None
-    except Exception as e:
-        logging.error(f"Validation error: {e}")
+    except Exception:
         return None
 
-# --- API ДЛЯ WEB APP (AIOHTTP) ---
-async def api_get_balance(request):
-    """Эндпоинт для получения баланса. Требует initData в заголовке."""
-    init_data = request.headers.get("Authorization", "")
-    user_data = validate_telegram_data(init_data)
-    
-    if not user_data:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-        
-    user_id = user_data.get("id")
-    db_user = await get_user(user_id)
-    return web.json_response(db_user)
+# --- МАТЕМАТИКА МИН ---
+def calculate_mines_multiplier(total_tiles, mines, revealed):
+    if revealed == 0: return 0.80
+    probability = 1.0
+    for i in range(revealed): probability *= (total_tiles - mines - i) / (total_tiles - i)
+    return max(0.80, round((1.0 / probability) * 0.90, 2))
 
-# --- ХЭНДЛЕРЫ БОТА ---
+# --- ВАЖНО: ЭНДПОИНТ ПОПОЛНЕНИЯ БАЛАНСА (МОК) ---
+async def api_deposit(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    data = await request.json()
+    amount = float(data.get("amount", 0))
+    # В реальном приложении здесь должна быть проверка транзакции в блокчейне TON (через TonAPI)
+    # Для текущего этапа мы просто зачисляем баланс на сервере
+    if amount > 0:
+        new_bal = await update_balance(user_data["id"], amount, is_demo=False)
+        return web.json_response({"status": "success", "new_balance": new_bal})
+    return web.json_response({"error": "Invalid amount"}, status=400)
+
+async def api_get_balance(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    return web.json_response(await get_user(user_data.get("id")))
+
+# API МИНЫ, UPGRADE, ESCAPE (Оставлены без изменений)
+async def api_mines_start(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    user_id = user_data.get("id")
+    data = await request.json()
+    bet, mines_count, is_demo = float(data.get("bet", 0.25)), int(data.get("mines", 3)), bool(data.get("is_demo", False))
+    if bet < 0.25 or mines_count < 1 or mines_count > 24: return web.json_response({"error": "Invalid params"}, status=400)
+    db_user = await get_user(user_id)
+    if (db_user["demo_balance"] if is_demo else db_user["balance"]) < bet: return web.json_response({"error": "Insufficient funds"}, status=400)
+    new_bal = await update_balance(user_id, -bet, is_demo)
+    board = ['safe'] * 25
+    planted = 0
+    while planted < mines_count:
+        idx = random.randint(0, 24)
+        if board[idx] == 'safe': board[idx] = 'mine'; planted += 1
+    active_mines_games[user_id] = {"board": board, "bet": bet, "mines_count": mines_count, "revealed": 0, "is_demo": is_demo}
+    return web.json_response({"status": "started", "new_balance": new_bal})
+
+async def api_mines_click(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    user_id = user_data.get("id")
+    if user_id not in active_mines_games: return web.json_response({"error": "No active game"}, status=400)
+    game = active_mines_games[user_id]
+    cell_index = int((await request.json()).get("index", -1))
+    if cell_index < 0 or cell_index > 24: return web.json_response({"error": "Invalid cell"}, status=400)
+    if game["board"][cell_index] == 'mine':
+        board_copy = game["board"]; del active_mines_games[user_id]
+        return web.json_response({"status": "loss", "board": board_copy})
+    else:
+        game["revealed"] += 1
+        mult = calculate_mines_multiplier(25, game["mines_count"], game["revealed"])
+        if game["revealed"] == (25 - game["mines_count"]):
+            winnings = round(game["bet"] * mult, 2)
+            new_bal = await update_balance(user_id, winnings, game["is_demo"])
+            board_copy = game["board"]; del active_mines_games[user_id]
+            return web.json_response({"status": "win", "winnings": winnings, "board": board_copy, "new_balance": new_bal})
+        return web.json_response({"status": "continue", "multiplier": mult})
+
+async def api_mines_cashout(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    user_id = user_data.get("id")
+    if user_id not in active_mines_games: return web.json_response({"error": "No active game"}, status=400)
+    game = active_mines_games[user_id]
+    if game["revealed"] == 0: return web.json_response({"error": "Cannot cashout 0"}, status=400)
+    winnings = round(game["bet"] * calculate_mines_multiplier(25, game["mines_count"], game["revealed"]), 2)
+    new_bal = await update_balance(user_id, winnings, game["is_demo"])
+    board_copy = game["board"]; del active_mines_games[user_id]
+    return web.json_response({"status": "cashed_out", "winnings": winnings, "board": board_copy, "new_balance": new_bal})
+
+async def api_upgrade_play(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    user_id = user_data.get("id")
+    data = await request.json()
+    bet, chance, is_demo = float(data.get("bet", 0.25)), int(data.get("chance", 50)), bool(data.get("is_demo", False))
+    if bet < 0.25 or chance < 30 or chance > 75: return web.json_response({"error": "Invalid params"}, status=400)
+    db_user = await get_user(user_id)
+    if (db_user["demo_balance"] if is_demo else db_user["balance"]) < bet: return web.json_response({"error": "Insufficient funds"}, status=400)
+    await update_balance(user_id, -bet, is_demo)
+    is_win = random.randint(1, 100) <= chance
+    win_amount = round(bet * round(98.0 / chance, 2), 2) if is_win else 0.0
+    new_bal = await update_balance(user_id, win_amount, is_demo)
+    return web.json_response({"status": "success", "is_win": is_win, "win_amount": win_amount, "new_balance": new_bal})
+
+async def api_escape_play(request):
+    user_data = validate_telegram_data(request.headers.get("Authorization", ""))
+    if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
+    user_id = user_data.get("id")
+    data = await request.json()
+    bet, is_demo = float(data.get("bet", 0.25)), bool(data.get("is_demo", False))
+    if bet < 0.25: return web.json_response({"error": "Invalid params"}, status=400)
+    db_user = await get_user(user_id)
+    if (db_user["demo_balance"] if is_demo else db_user["balance"]) < bet: return web.json_response({"error": "Insufficient funds"}, status=400)
+    await update_balance(user_id, -bet, is_demo)
+    is_win = random.random() < 0.40
+    multiplier = round(random.uniform(1.20, 3.50), 2) if is_win else round(random.uniform(1.01, 1.49), 2)
+    win_amount = round(bet * multiplier, 2) if is_win else 0.0
+    new_bal = await update_balance(user_id, win_amount, is_demo)
+    return web.json_response({"status": "success", "is_win": is_win, "multiplier": multiplier, "win_amount": win_amount, "new_balance": new_bal})
+
+# ==========================================
+# WEBSOCKET МУЛЬТИПЛЕЕР (ICE ARENA)
+# ==========================================
+async def arena_broadcast(data):
+    for ws in list(arena_connections):
+        if not ws.closed:
+            await ws.send_json(data)
+        else:
+            arena_connections.discard(ws)
+
+def get_arena_state():
+    return {"players": arena_players, "totalBank": sum(p["bet"] for p in arena_players)}
+
+async def arena_ws_handler(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    user_id, user_name = None, None
+
+    async for msg in ws:
+        if msg.type == aiohttp.WSMsgType.TEXT:
+            try:
+                data = json.loads(msg.data)
+                
+                # 1. Авторизация при подключении
+                if data.get("type") == "AUTH":
+                    user_data = validate_telegram_data(data.get("initData", ""))
+                    if user_data:
+                        user_id = user_data.get("id")
+                        user_name = user_data.get("first_name", "Игрок")
+                        arena_connections.add(ws)
+                        await ws.send_json({"type": "INIT", "room": get_arena_state()})
+                    else:
+                        await ws.close()
+
+                # 2. Ставка на арене (только реальный баланс)
+                elif data.get("type") == "JOIN_ARENA" and user_id and arena_state == 'WAITING':
+                    bet = float(data.get("bet", 0.25))
+                    db_user = await get_user(user_id)
+                    
+                    if db_user["balance"] >= bet and bet >= 0.25:
+                        # Списываем баланс!
+                        new_bal = await update_balance(user_id, -bet, is_demo=False)
+                        
+                        # Обновляем или добавляем игрока на поле
+                        existing = next((p for p in arena_players if p["id"] == user_id), None)
+                        if existing:
+                            existing["bet"] += bet
+                        else:
+                            arena_players.append({"id": user_id, "name": user_name, "bet": bet, "color": "#3b82f6"})
+                        
+                        # Отправляем клиенту его новый баланс
+                        await ws.send_json({"type": "BALANCE_UPDATE", "new_balance": new_bal})
+                        await arena_broadcast({"type": "ROOM_UPDATE", "room": get_arena_state()})
+            except Exception as e:
+                logging.error(f"WS Error: {e}")
+    
+    arena_connections.discard(ws)
+    return ws
+
+# Фоновая задача: Управление Ареной (Таймер, Боты, Рулетка)
+async def arena_game_loop():
+    global arena_state, arena_timer, arena_players
+    while True:
+        await asyncio.sleep(1)
+        
+        # Добавление ботов, если игроков мало (как было в Node.js)
+        if arena_state == 'WAITING' and len(arena_players) < 2:
+            bot_count = sum(1 for p in arena_players if str(p["id"]).startswith("bot_"))
+            if bot_count == 0 and random.random() < 0.3: # 30% шанс добавить бота каждую секунду
+                bot_name = random.choice(BOT_NAMES)
+                bot_bet = round(random.uniform(0.25, 2.0), 2)
+                arena_players.append({"id": f"bot_{random.randint(1000,9999)}", "name": bot_name, "bet": bot_bet, "color": "#ef4444"})
+                await arena_broadcast({"type": "ROOM_UPDATE", "room": get_arena_state()})
+
+        # Таймер
+        if arena_state == 'WAITING' and len(arena_players) >= 2:
+            arena_timer -= 1
+            await arena_broadcast({"type": "TIMER_UPDATE", "timer": arena_timer})
+            
+            if arena_timer <= 0:
+                # НАЧАЛО ИГРЫ
+                arena_state = 'SPINNING'
+                total_bank = sum(p["bet"] for p in arena_players)
+                commission = total_bank * 0.25 # Комиссия 25% как в UI
+                net_win = total_bank - commission
+                
+                random_stop_x = random.uniform(0, 340)
+                current_x = 0
+                winner = arena_players[0]
+                
+                for p in arena_players:
+                    slice_width = (p["bet"] / total_bank) * 340
+                    if current_x <= random_stop_x <= current_x + slice_width:
+                        winner = p
+                    current_x += slice_width
+                
+                # Если победил реальный игрок, начисляем выигрыш
+                if not str(winner["id"]).startswith("bot_"):
+                    await update_balance(winner["id"], net_win, is_demo=False)
+                
+                await arena_broadcast({
+                    "type": "SPIN_START", 
+                    "stopX": random_stop_x, 
+                    "winnerId": winner["id"], 
+                    "netWin": round(net_win, 2)
+                })
+                
+                await asyncio.sleep(7) # Ждем завершения анимации у клиентов
+                
+                # Сброс арены
+                arena_players = []
+                arena_state = 'WAITING'
+                arena_timer = 15
+                await arena_broadcast({"type": "RESET_ROOM"})
+
+# --- БОТ ХЭНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     args = message.text.split()
-    
-    await get_user(user_id) # Инициализируем юзера в БД
-
+    await get_user(user_id)
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
         if str(referrer_id) != str(user_id):
@@ -107,11 +320,7 @@ async def cmd_start(message: types.Message):
     builder.button(text="Пополнить баланс", callback_data="deposit_ton")
     builder.button(text="Вывести средства", callback_data="withdraw_ton")
     builder.adjust(1)
-    
-    await message.answer(
-        "Привет! Добро пожаловать в Arcade Hub.\nИгры на баланс GRAM.",
-        reply_markup=builder.as_markup()
-    )
+    await message.answer("Привет! Добро пожаловать в Arcade Hub.\nИгры на баланс GRAM.", reply_markup=builder.as_markup())
 
 @dp.callback_query(lambda c: c.data in ["deposit_ton", "withdraw_ton"])
 async def process_payments(callback: types.CallbackQuery):
@@ -122,36 +331,34 @@ async def process_payments(callback: types.CallbackQuery):
     await callback.message.answer(text, parse_mode="Markdown")
     await callback.answer()
 
-# --- ЗАПУСК БОТА И ВЕБ-СЕРВЕРА ВМЕСТЕ ---
 async def main():
     await init_db()
-    
-    # Настройка API сервера
     app = web.Application()
     app.router.add_get('/api/balance', api_get_balance)
+    app.router.add_post('/api/deposit', api_deposit) # Эндпоинт депозита
+    app.router.add_post('/api/mines/start', api_mines_start)
+    app.router.add_post('/api/mines/click', api_mines_click)
+    app.router.add_post('/api/mines/cashout', api_mines_cashout)
+    app.router.add_post('/api/upgrade/play', api_upgrade_play)
+    app.router.add_post('/api/escape/play', api_escape_play)
+    app.router.add_get('/api/arena/ws', arena_ws_handler) # WebSocket Арены
     
-    # Настройка CORS для локальной разработки (позволяет WebApp делать запросы)
     import aiohttp_cors
     cors = aiohttp_cors.setup(app, defaults={
-        "*": aiohttp_cors.ResourceOptions(
-            allow_credentials=True,
-            expose_headers="*",
-            allow_headers="*",
-        )
+        "*": aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*")
     })
-    for route in list(app.router.routes()):
-        cors.add(route)
+    for route in list(app.router.routes()): cors.add(route)
     
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     await site.start()
-    
     logging.info(f"API Server started at http://{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
     
-    await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(text="Меню", web_app=WebAppInfo(url=GAME_URL))
-    )
+    # Запуск фонового процесса Арены
+    asyncio.create_task(arena_game_loop())
+    
+    await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Меню", web_app=WebAppInfo(url=GAME_URL)))
     logging.info("Telegram Bot started!")
     await dp.start_polling(bot)
 
@@ -160,7 +367,5 @@ if __name__ == "__main__":
     try:
         import aiohttp_cors
     except ImportError:
-        import sys
-        print("Пожалуйста, установите aiohttp_cors: pip install aiohttp-cors")
-        sys.exit(1)
+        import sys; print("Установите aiohttp_cors"); sys.exit(1)
     asyncio.run(main())

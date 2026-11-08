@@ -1,4 +1,4 @@
-import { tg, updateBalance, score, showToast, userId } from './core.js';
+import { tg, updateBalance, score, showToast, userId, API_BASE_URL } from './core.js';
 
 const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
     manifestUrl: 'https://ka3a3-sketch.github.io/arcade-hub/tonconnect-manifest.json',
@@ -46,11 +46,29 @@ window.sendTonDeposit = async function() {
         window.closeDepositModal();
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
         
+        // 1. Отправляем транзакцию в кошелек TON
         await tonConnectUI.sendTransaction(transaction);
-        updateBalance(score + gramAmount);
-
-        showToast(`Оплата прошла! Зачислено +${gramAmount.toFixed(2)} GRAM.`, true);
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        
+        showToast('Транзакция отправлена. Проверяем...', true);
+        
+        // 2. Отправляем запрос на наш сервер для зачисления баланса
+        let res = await fetch(`${API_BASE_URL}/api/deposit`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': tg.initData 
+            },
+            body: JSON.stringify({ amount: gramAmount })
+        });
+        
+        if (res.ok) {
+            let data = await res.json();
+            updateBalance(data.new_balance);
+            showToast(`Оплата прошла! Зачислено +${gramAmount.toFixed(2)} GRAM.`, true);
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        } else {
+            showToast('Ошибка при зачислении на сервере.', false);
+        }
 
     } catch (e) {
         showToast('Оплата отменена или произошла ошибка.', false);
