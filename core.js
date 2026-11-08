@@ -81,25 +81,10 @@ export function updateBalance(newScore) {
     updateDemoUIState();
 }
 
-export function setScore(val) {
-    score = val;
-    updateBalance();
-}
-
-export function addScore(val) {
-    score += val;
-    updateBalance();
-}
-
-export function subScore(val) {
-    score -= val;
-    updateBalance();
-}
-
-export function addCashback(val) {
-    cashbackAmount += val;
-    updateBalance();
-}
+export function setScore(val) { score = val; updateBalance(); }
+export function addScore(val) { score += val; updateBalance(); }
+export function subScore(val) { score -= val; updateBalance(); }
+export function addCashback(val) { cashbackAmount += val; updateBalance(); }
 
 function updateDemoUIState() {
     let demoBtn = document.getElementById('demoModeToggleBtn');
@@ -128,13 +113,16 @@ window.toggleDemoMode = function() {
 
 updateBalance();
 
+// ГЛОБАЛЬНЫЕ ФУНКЦИИ НАВИГАЦИИ (Единственное место объявления)
 window.openScreen = function(screenName) {
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
     let target = document.getElementById('screen-' + screenName);
     if (target) target.classList.add('active');
     
     if (screenName === 'iceUpgrade') {
-        import('./iceUpgrade.js').then(module => module.drawUpgradeFrame());
+        import('./iceUpgrade.js').then(module => {
+            if (module.drawUpgradeFrame) module.drawUpgradeFrame();
+        }).catch(e => console.log(e));
     }
 };
 
@@ -145,22 +133,24 @@ window.switchNav = function(screenName, btnElement) {
 };
 
 window.openGame = function(gameName) {
+    window.openScreen(gameName);
+
     if (gameName === 'iceArena') {
-        if (isDemoMode) {
-            showToast("PvP арена недоступна в Демо-режиме!", false);
-            return;
-        }
-        window.openScreen('iceArena');
-        import('./iceArena.js').then(module => module.initArenaOnOpen());
+        import('./iceArena.js').then(module => {
+            if (module.initArenaOnOpen) module.initArenaOnOpen();
+        }).catch(e => console.log(e));
     } else if (gameName === 'iceUpgrade') {
-        window.openScreen('iceUpgrade');
-        import('./iceUpgrade.js').then(module => module.resetUpgradeVisuals());
+        import('./iceUpgrade.js').then(module => {
+            if (module.resetUpgradeVisuals) module.resetUpgradeVisuals();
+        }).catch(e => console.log(e));
     } else if (gameName === 'escape') {
-        window.openScreen('escape');
-        import('./escape.js').then(module => module.resetEscapeVisuals());
+        import('./escape.js').then(module => {
+            if (module.resetEscapeVisuals) module.resetEscapeVisuals();
+        }).catch(e => console.log(e));
     } else if (gameName === 'mines') {
-        window.openScreen('mines');
-        import('./mines.js').then(module => module.initGrid());
+        import('./mines.js').then(module => {
+            if (module.initGrid) module.initGrid();
+        }).catch(e => console.log(e));
     }
 };
 
