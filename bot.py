@@ -14,10 +14,13 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import MenuButtonWebApp, WebAppInfo
 
+# --- НАСТРОЙКИ ---
 TOKEN = os.getenv("BOT_TOKEN", "9015659427:AAEHv6oruPJswEq_q4_F0999F_ixYtIz538")
 GAME_URL = "https://ka3a3-sketch.github.io/arcade-hub/"
-WEB_SERVER_HOST = "127.0.0.1"
-WEB_SERVER_PORT = 8081
+
+# ВАЖНО: Настройки для работы на Render и других облачных сервисах
+WEB_SERVER_HOST = "0.0.0.0"
+WEB_SERVER_PORT = int(os.getenv("PORT", 8081))
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,13 +28,6 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 active_mines_games = {}
-
-# --- СОСТОЯНИЕ АРЕНЫ ---
-arena_state = 'WAITING' # WAITING, SPINNING
-arena_players = []
-arena_timer = 15
-arena_connections = set()
-BOT_NAMES = ["CryptoKing", "LuckyJoe", "TonMaster", "GramWinner", "MoonHodler", "BitSniper"]
 
 # --- БАЗА ДАННЫХ ---
 async def init_db():
@@ -85,15 +81,13 @@ def calculate_mines_multiplier(total_tiles, mines, revealed):
     for i in range(revealed): probability *= (total_tiles - mines - i) / (total_tiles - i)
     return max(0.80, round((1.0 / probability) * 0.90, 2))
 
-# --- ВАЖНО: ЭНДПОИНТ ПОПОЛНЕНИЯ БАЛАНСА (МОК) ---
+# --- API ЭНДПОИНТЫ ---
 async def api_deposit(request):
     user_data = validate_telegram_data(request.headers.get("Authorization", ""))
     if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
     
     data = await request.json()
     amount = float(data.get("amount", 0))
-    # В реальном приложении здесь должна быть проверка транзакции в блокчейне TON (через TonAPI)
-    # Для текущего этапа мы просто зачисляем баланс на сервере
     if amount > 0:
         new_bal = await update_balance(user_data["id"], amount, is_demo=False)
         return web.json_response({"status": "success", "new_balance": new_bal})
@@ -104,7 +98,6 @@ async def api_get_balance(request):
     if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
     return web.json_response(await get_user(user_data.get("id")))
 
-# API МИНЫ, UPGRADE, ESCAPE (Оставлены без изменений)
 async def api_mines_start(request):
     user_data = validate_telegram_data(request.headers.get("Authorization", ""))
     if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
@@ -187,121 +180,6 @@ async def api_escape_play(request):
     new_bal = await update_balance(user_id, win_amount, is_demo)
     return web.json_response({"status": "success", "is_win": is_win, "multiplier": multiplier, "win_amount": win_amount, "new_balance": new_bal})
 
-# ==========================================
-# WEBSOCKET МУЛЬТИПЛЕЕР (ICE ARENA)
-# ==========================================
-async def arena_broadcast(data):
-    for ws in list(arena_connections):
-        if not ws.closed:
-            await ws.send_json(data)
-        else:
-            arena_connections.discard(ws)
-
-def get_arena_state():
-    return {"players": arena_players, "totalBank": sum(p["bet"] for p in arena_players)}
-
-async def arena_ws_handler(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-    user_id, user_name = None, None
-
-    async for msg in ws:
-        if msg.type == aiohttp.WSMsgType.TEXT:
-            try:
-                data = json.loads(msg.data)
-                
-                # 1. Авторизация при подключении
-                if data.get("type") == "AUTH":
-                    user_data = validate_telegram_data(data.get("initData", ""))
-                    if user_data:
-                        user_id = user_data.get("id")
-                        user_name = user_data.get("first_name", "Игрок")
-                        arena_connections.add(ws)
-                        await ws.send_json({"type": "INIT", "room": get_arena_state()})
-                    else:
-                        await ws.close()
-
-                # 2. Ставка на арене (только реальный баланс)
-                elif data.get("type") == "JOIN_ARENA" and user_id and arena_state == 'WAITING':
-                    bet = float(data.get("bet", 0.25))
-                    db_user = await get_user(user_id)
-                    
-                    if db_user["balance"] >= bet and bet >= 0.25:
-                        # Списываем баланс!
-                        new_bal = await update_balance(user_id, -bet, is_demo=False)
-                        
-                        # Обновляем или добавляем игрока на поле
-                        existing = next((p for p in arena_players if p["id"] == user_id), None)
-                        if existing:
-                            existing["bet"] += bet
-                        else:
-                            arena_players.append({"id": user_id, "name": user_name, "bet": bet, "color": "#3b82f6"})
-                        
-                        # Отправляем клиенту его новый баланс
-                        await ws.send_json({"type": "BALANCE_UPDATE", "new_balance": new_bal})
-                        await arena_broadcast({"type": "ROOM_UPDATE", "room": get_arena_state()})
-            except Exception as e:
-                logging.error(f"WS Error: {e}")
-    
-    arena_connections.discard(ws)
-    return ws
-
-# Фоновая задача: Управление Ареной (Таймер, Боты, Рулетка)
-async def arena_game_loop():
-    global arena_state, arena_timer, arena_players
-    while True:
-        await asyncio.sleep(1)
-        
-        # Добавление ботов, если игроков мало (как было в Node.js)
-        if arena_state == 'WAITING' and len(arena_players) < 2:
-            bot_count = sum(1 for p in arena_players if str(p["id"]).startswith("bot_"))
-            if bot_count == 0 and random.random() < 0.3: # 30% шанс добавить бота каждую секунду
-                bot_name = random.choice(BOT_NAMES)
-                bot_bet = round(random.uniform(0.25, 2.0), 2)
-                arena_players.append({"id": f"bot_{random.randint(1000,9999)}", "name": bot_name, "bet": bot_bet, "color": "#ef4444"})
-                await arena_broadcast({"type": "ROOM_UPDATE", "room": get_arena_state()})
-
-        # Таймер
-        if arena_state == 'WAITING' and len(arena_players) >= 2:
-            arena_timer -= 1
-            await arena_broadcast({"type": "TIMER_UPDATE", "timer": arena_timer})
-            
-            if arena_timer <= 0:
-                # НАЧАЛО ИГРЫ
-                arena_state = 'SPINNING'
-                total_bank = sum(p["bet"] for p in arena_players)
-                commission = total_bank * 0.25 # Комиссия 25% как в UI
-                net_win = total_bank - commission
-                
-                random_stop_x = random.uniform(0, 340)
-                current_x = 0
-                winner = arena_players[0]
-                
-                for p in arena_players:
-                    slice_width = (p["bet"] / total_bank) * 340
-                    if current_x <= random_stop_x <= current_x + slice_width:
-                        winner = p
-                    current_x += slice_width
-                
-                # Если победил реальный игрок, начисляем выигрыш
-                if not str(winner["id"]).startswith("bot_"):
-                    await update_balance(winner["id"], net_win, is_demo=False)
-                
-                await arena_broadcast({
-                    "type": "SPIN_START", 
-                    "stopX": random_stop_x, 
-                    "winnerId": winner["id"], 
-                    "netWin": round(net_win, 2)
-                })
-                
-                await asyncio.sleep(7) # Ждем завершения анимации у клиентов
-                
-                # Сброс арены
-                arena_players = []
-                arena_state = 'WAITING'
-                arena_timer = 15
-                await arena_broadcast({"type": "RESET_ROOM"})
-
 # --- БОТ ХЭНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -335,13 +213,12 @@ async def main():
     await init_db()
     app = web.Application()
     app.router.add_get('/api/balance', api_get_balance)
-    app.router.add_post('/api/deposit', api_deposit) # Эндпоинт депозита
+    app.router.add_post('/api/deposit', api_deposit)
     app.router.add_post('/api/mines/start', api_mines_start)
     app.router.add_post('/api/mines/click', api_mines_click)
     app.router.add_post('/api/mines/cashout', api_mines_cashout)
     app.router.add_post('/api/upgrade/play', api_upgrade_play)
     app.router.add_post('/api/escape/play', api_escape_play)
-    app.router.add_get('/api/arena/ws', arena_ws_handler) # WebSocket Арены
     
     import aiohttp_cors
     cors = aiohttp_cors.setup(app, defaults={
@@ -354,9 +231,6 @@ async def main():
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     await site.start()
     logging.info(f"API Server started at http://{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-    
-    # Запуск фонового процесса Арены
-    asyncio.create_task(arena_game_loop())
     
     await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Меню", web_app=WebAppInfo(url=GAME_URL)))
     logging.info("Telegram Bot started!")

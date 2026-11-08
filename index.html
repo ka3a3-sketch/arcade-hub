@@ -149,11 +149,6 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .card-banner:active { transform: scale(0.98); }
-        .card-banner.arena { 
-            background: linear-gradient(135deg, rgba(13, 148, 136, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%); 
-            border: 1px solid rgba(20, 184, 166, 0.4); 
-            box-shadow: 0 8px 30px rgba(13, 148, 136, 0.15);
-        }
 
         .games-row-2, .games-row-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
 
@@ -190,75 +185,16 @@
         .card-content p { margin: 0; font-size: 11px; color: var(--text-sec); line-height: 1.3; }
         .card-link { font-size: 12px; font-weight: 700; color: var(--accent-blue); margin-top: 14px; display: inline-block; }
         
-        /* Стили для квадратной арены */
         .escape-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
         .escape-canvas-wrap { 
             position: relative; 
             width: 100%; 
             max-width: 360px; 
-            aspect-ratio: 1 / 1; /* Строго квадратная */
+            aspect-ratio: 1 / 1; 
             margin: 0 auto 12px auto; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-        }
-        #arenaCanvas { 
-            width: 100%; 
-            height: 100%; 
-            border-radius: 28px; 
-            background: #0b1120; 
-            border: 2px solid rgba(56, 189, 248, 0.4); 
-            box-shadow: 0 8px 30px rgba(0,0,0,0.7); 
-        }
-        
-        .arena-players-list {
-            display: flex; flex-direction: column; gap: 8px;
-            width: 100%; max-height: 160px; overflow-y: auto;
-        }
-        .arena-player-card {
-            background: var(--card-bg); border: 1px solid var(--border-color);
-            border-radius: 18px; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between;
-            backdrop-filter: blur(10px);
-        }
-        .arena-player-left { display: flex; align-items: center; gap: 10px; }
-        .arena-player-avatar {
-            width: 36px; height: 36px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 13px; font-weight: 800; color: #fff;
-        }
-        .arena-player-info h4 { margin: 0 0 2px 0; font-size: 13px; font-weight: 700; color: #f8fafc; }
-        .arena-player-info p { margin: 0; font-size: 11px; color: var(--text-sec); }
-        .arena-player-right { text-align: right; }
-        .arena-player-chance { font-size: 13px; font-weight: 800; color: #f8fafc; margin: 0 0 2px 0; }
-        .arena-player-bet { font-size: 11px; font-weight: 700; color: var(--accent-gold); margin: 0; text-align: right; }
-
-        #arenaWinModal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(7, 9, 19, 0.85); backdrop-filter: blur(12px);
-            z-index: 2000; justify-content: center; align-items: center; padding: 20px;
-        }
-        .win-modal-content {
-            background: linear-gradient(135deg, #121a29 0%, #0b1120 100%);
-            border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 28px;
-            padding: 24px 20px; width: 100%; max-width: 340px;
-            display: flex; flex-direction: column; align-items: center; text-align: center;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.8);
-        }
-        .win-modal-badge {
-            background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 30px; padding: 8px 18px; font-size: 14px; font-weight: 700;
-            color: #f8fafc; margin-bottom: 20px;
-        }
-        .win-modal-card {
-            background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color);
-            border-radius: 20px; width: 100%; padding: 20px;
-            display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 24px;
-        }
-        .win-modal-amount { font-size: 28px; font-weight: 900; color: #f8fafc; margin: 0; }
-        .win-modal-close-btn {
-            background: linear-gradient(135deg, #2dd4bf, #0d9488); color: #070913;
-            border: none; width: 100%; padding: 14px; border-radius: 18px;
-            font-size: 15px; font-weight: 800; cursor: pointer; text-align: center;
         }
 
         .escape-outcomes { display: flex; justify-content: space-between; width: 100%; max-width: 300px; margin: 0 auto 8px auto; padding: 0 10px; font-size: 13px; font-weight: 700; color: #64748b; }
@@ -419,14 +355,6 @@
             </div>
         </div>
 
-        <div class="card-banner arena" onclick="openGame('iceArena')">
-            <div class="card-content">
-                <h3>ICE ARENA</h3>
-                <p>Ставь GRAM, следи за шайбой и забирай общий банк</p>
-                <span class="card-link">Играть &rarr;</span>
-            </div>
-        </div>
-
         <div class="games-row-2">
             <div class="card-box escape" onclick="openGame('escape')">
                 <div class="card-content">
@@ -475,8 +403,8 @@
             
             <div style="width: 90vw; max-width: 380px; margin: 12px 0 4px 0;">
                 <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-sec); margin-bottom: 4px;">
-                    <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">66</span>%</span>
-                    <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.48x</span></span>
+                    <span>Шанс: <span id="upgradeChanceVal" style="color: var(--accent-green);">50</span>%</span>
+                    <span>Множитель: <span id="upgradeMultVal" style="color: var(--accent-gold);">1.96x</span></span>
                 </div>
                 <input type="range" id="upgradeChanceRange" min="30" max="75" value="50" step="1" style="width: 100%; cursor: pointer;" oninput="updateUpgradeChance(this.value)">
             </div>
@@ -496,57 +424,6 @@
                 </div>
             </div>
             <button class="main-action-btn" id="upgradeActionBtn" onclick="startIceUpgrade()" style="background: linear-gradient(135deg, #10b981, #059669);">Сделать ставку</button>
-        </div>
-    </div>
-
-    <!-- ЭКРАН: ICE ARENA (С НОВОЙ СТРУКТУРОЙ БЛОКОВ) -->
-    <div id="screen-iceArena" class="screen">
-        <button class="back-btn" onclick="openScreen('games')">&larr; В меню</button>
-        <div class="menu-title" style="font-size: 18px; margin-bottom: 2px; text-align: center;">ICE ARENA</div>
-        
-        <div class="escape-container">
-            <!-- 1. Квадратная арена -->
-            <div class="escape-canvas-wrap">
-                <canvas id="arenaCanvas" width="800" height="800"></canvas>
-            </div>
-            
-            <!-- 2. Блок выбора и совершения ставки -->
-            <div class="control-panel" style="margin-bottom: 12px;">
-                <div class="mines-info-bar">
-                    <div>Банк: <span id="arenaTotalBank">0.00</span> GRAM</div>
-                    <div>Комиссия: <span style="color:#ef4444;">25%</span></div>
-                </div>
-                <div class="presets-row">
-                    <button class="preset-btn" onclick="setArenaBet(0.25)">0.25</button>
-                    <button class="preset-btn" onclick="setArenaBet(1.00)">1.00</button>
-                    <button class="preset-btn" onclick="setArenaBet(5.00)">5.00</button>
-                    <button class="preset-btn" onclick="setArenaBet(10.00)">10.00</button>
-                </div>
-                <div class="actions-row">
-                    <div class="pill-box" style="width: 100%;">
-                        <span>СТАВКА</span>
-                        <input type="number" id="arenaBetInput" value="0.25" min="0.25" step="0.25">
-                        <span>GRAM</span>
-                    </div>
-                </div>
-                <button class="main-action-btn" id="arenaActionBtn" onclick="joinArenaGame()">Поставить 0.25 GRAM</button>
-            </div>
-
-            <!-- 3. Список участников текущего раунда -->
-            <div style="width: 100%; max-width: 380px;">
-                <div id="arenaTimerText" style="font-size: 13px; font-weight: 700; color: var(--accent-blue); margin-bottom: 6px; text-align: center;">Ожидание игроков...</div>
-                <div class="arena-players-list" id="arenaPlayersList"></div>
-            </div>
-        </div>
-    </div>
-
-    <div id="arenaWinModal">
-        <div class="win-modal-content">
-            <div class="win-modal-badge" id="winModalBadgeText">@username • 100%</div>
-            <div class="win-modal-card">
-                <div class="win-modal-amount" id="winModalAmountText">+0.00</div>
-            </div>
-            <button class="win-modal-close-btn" onclick="closeArenaWinModal()">Закрыть</button>
         </div>
     </div>
 
@@ -698,6 +575,6 @@
         </button>
     </div>
 
-    <script type="module" src="./main.js?v=2026"></script>
+    <script type="module" src="./main.js?v=2028"></script>
 </body>
 </html>

@@ -1,8 +1,7 @@
 export let tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 if (tg) { tg.expand(); }
 
-// Адрес нашего локального API-сервера (проброшенный через localhost.run)
-export const API_BASE_URL = "https://c4a833770814b9.lhr.life";
+export const API_BASE_URL = "https://arcade-hub-api-o1jd.onrender.com";
 
 export let userName = "Игрок";
 export let userHandle = "@username";
@@ -38,18 +37,12 @@ export let cashbackAmount = 1.00;
 const balanceEl = document.getElementById('balance');
 const profileBalanceEl = document.getElementById('profile-balance');
 
-// --- ФУНКЦИЯ СИНХРОНИЗАЦИИ С БЭКЕНДОМ ---
 export async function syncBalance() {
-    if (!tg || !tg.initData) {
-        console.warn("Нет Telegram initData. Работаем в тестовом оффлайн-режиме.");
-        return;
-    }
+    if (!tg || !tg.initData) return;
     try {
         let response = await fetch(`${API_BASE_URL}/api/balance`, {
             method: 'GET',
-            headers: {
-                'Authorization': tg.initData
-            }
+            headers: { 'Authorization': tg.initData }
         });
         if (response.ok) {
             let data = await response.json();
@@ -57,9 +50,6 @@ export async function syncBalance() {
             demoScore = parseFloat(data.demo_balance);
             score = isDemoMode ? demoScore : realScore;
             updateBalanceUI();
-            console.log("Баланс успешно загружен с сервера!");
-        } else {
-            console.error("Ошибка авторизации на сервере");
         }
     } catch (e) {
         console.error("Ошибка подключения к серверу API:", e);
@@ -69,11 +59,9 @@ export async function syncBalance() {
 export function showToast(text, isSuccess = false) {
     let container = document.getElementById('toast-container');
     if (!container) return;
-    
     let toast = document.createElement('div');
     toast.className = `toast-msg ${isSuccess ? 'success' : ''}`;
     toast.innerText = text;
-    
     container.appendChild(toast);
     setTimeout(() => { toast.classList.add('show'); }, 10);
     setTimeout(() => {
@@ -82,19 +70,10 @@ export function showToast(text, isSuccess = false) {
     }, 3000);
 }
 
-// Эта функция теперь просто обновляет локальную переменную и UI, 
-// потому что сам баланс пересчитывается сервером
 export function updateBalance(newScore) {
-    if (newScore !== undefined) {
-        score = newScore;
-    }
+    if (newScore !== undefined) score = newScore;
     score = parseFloat(score.toFixed(2));
-    
-    if (isDemoMode) {
-        demoScore = score;
-    } else {
-        realScore = score;
-    }
+    if (isDemoMode) demoScore = score; else realScore = score;
     updateBalanceUI();
 }
 
@@ -104,7 +83,6 @@ function updateBalanceUI() {
         let currencyLabel = balanceEl.nextSibling;
         if(currencyLabel) currencyLabel.nodeValue = isDemoMode ? " DEMO" : " GRAM";
     }
-    
     if (profileBalanceEl) profileBalanceEl.innerText = score.toFixed(2);
     
     let cbBal = document.getElementById('cashbackBalance');
@@ -131,15 +109,12 @@ function updateDemoUIState() {
 window.toggleDemoMode = function() {
     isDemoMode = !isDemoMode;
     localStorage.setItem(`gram_is_demo_${userId}`, isDemoMode);
-    
     score = isDemoMode ? demoScore : realScore;
-
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
     updateBalanceUI();
     showToast(isDemoMode ? "Включен ДЕМО-режим!" : "Включен РЕАЛЬНЫЙ режим (GRAM).", isDemoMode);
 };
 
-// ГЛОБАЛЬНЫЕ ФУНКЦИИ НАВИГАЦИИ
 window.openScreen = function(screenName) {
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
     let target = document.getElementById('screen-' + screenName);
@@ -161,11 +136,7 @@ window.switchNav = function(screenName, btnElement) {
 window.openGame = function(gameName) {
     window.openScreen(gameName);
 
-    if (gameName === 'iceArena') {
-        import('./iceArena.js').then(module => {
-            if (module.initArenaOnOpen) module.initArenaOnOpen();
-        }).catch(e => console.log(e));
-    } else if (gameName === 'iceUpgrade') {
+    if (gameName === 'iceUpgrade') {
         import('./iceUpgrade.js').then(module => {
             if (module.resetUpgradeVisuals) module.resetUpgradeVisuals();
         }).catch(e => console.log(e));
@@ -183,33 +154,21 @@ window.openGame = function(gameName) {
 window.shareRefLink = function() {
     let text = encodeURIComponent("Присоединяйся к Arcade Hub, играй в мини-игры и зарабатывай GRAM!");
     let shareUrl = `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${text}`;
-    if (tg && tg.openTelegramLink) {
-        tg.openTelegramLink(shareUrl);
-    } else {
-        navigator.clipboard.writeText(refLink);
-        showToast("Ссылка скопирована в буфер обмена!", true);
-    }
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(shareUrl);
+    else { navigator.clipboard.writeText(refLink); showToast("Ссылка скопирована в буфер обмена!", true); }
 };
 
 window.claimRefRewards = function() {
-    if (refEarned <= 0) {
-        showToast("У вас пока нет доступных наград от рефералов!", false);
-        return;
-    }
-    addScore(refEarned);
-    refEarned = 0.0;
+    if (refEarned <= 0) { showToast("У вас пока нет доступных наград от рефералов!", false); return; }
+    addScore(refEarned); refEarned = 0.0;
     document.getElementById('refEarned').innerText = "0.00";
     showToast("Награды успешно зачислены!", true);
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 };
 
 window.claimCashback = function() {
-    if (cashbackAmount <= 0) {
-        showToast("У вас нет доступного кешбека!", false);
-        return;
-    }
-    addScore(cashbackAmount);
-    cashbackAmount = 0.0;
+    if (cashbackAmount <= 0) { showToast("У вас нет доступного кешбека!", false); return; }
+    addScore(cashbackAmount); cashbackAmount = 0.0;
     showToast("Кешбек успешно получен!", true);
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 };
@@ -217,6 +176,5 @@ window.claimCashback = function() {
 let soundEnabled = true;
 window.toggleSound = function(checkbox) { soundEnabled = checkbox.checked; };
 
-// Инициализация при старте
 updateBalanceUI();
-syncBalance(); // Запускаем загрузку баланса с бэкенда
+syncBalance();
