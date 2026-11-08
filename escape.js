@@ -1,4 +1,6 @@
-import { tg, score, updateBalance, addCashback, isDemoMode, showToast, initials, API_BASE_URL } from './core.js';
+// --- START OF FILE escape.js ---
+
+import { tg, score, updateBalance, addCashback, isDemoMode, showToast, initials, apiCall } from './core.js';
 
 const escapeCanvas = document.getElementById('escapeCanvas');
 const escapeCtx = escapeCanvas ? escapeCanvas.getContext('2d') : null;
@@ -13,7 +15,6 @@ let ringRotation = 0;
 let escapeAnimId = null;
 let currentBetAmount = 0.25;
 
-// Переменные для сервера
 let serverTargetMultiplier = 0;
 let serverIsWin = false;
 let serverWinAmount = 0;
@@ -22,21 +23,6 @@ let floatingAnim = {
     active: false, text: "", color: "#10b981", x: 0, y: 0, startX: 0, startY: 0,
     targetX: 250, targetY: -40, progress: 0, duration: 60, alpha: 1.0, isLossTimer: null
 };
-
-// API Вызов
-async function apiCall(endpoint, payload) {
-    if (!tg || !tg.initData) return null;
-    try {
-        let res = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': tg.initData },
-            body: JSON.stringify(payload)
-        });
-        return await res.json();
-    } catch (e) {
-        return null;
-    }
-}
 
 window.multiplyEscapeBet = function(factor) {
     if (escapeState !== 'IDLE' || !escapeBetInput) return;
@@ -75,7 +61,7 @@ window.startEscapeGame = async function startEscapeGame() {
         escapeActionBtn.disabled = true;
     }
 
-    // Запрашиваем результат у сервера
+    // Запрашиваем результат у сервера через новый apiCall
     let response = await apiCall('/api/escape/play', { bet: currentBetAmount, is_demo: isDemoMode });
     
     if (!response || response.error) {
@@ -88,12 +74,11 @@ window.startEscapeGame = async function startEscapeGame() {
         return;
     }
 
-    // Настраиваем анимацию под ответ сервера
     serverTargetMultiplier = response.multiplier;
     serverIsWin = response.is_win;
     serverWinAmount = response.win_amount;
 
-    updateBalance(response.new_balance - serverWinAmount); // Баланс без выигрыша во время полета
+    updateBalance(response.new_balance - serverWinAmount); 
     addCashback(currentBetAmount * 0.15);
 
     if (floatingAnim.isLossTimer) { clearTimeout(floatingAnim.isLossTimer); floatingAnim.isLossTimer = null; }
@@ -125,30 +110,25 @@ function runEscapeLoop(finalBalance) {
         let dist = Math.sqrt(dx * dx + dy * dy);
         let maxDist = ringRadius - ball.radius;
 
-        // Физика отскока
         if (dist >= maxDist) {
             let nx = dx / dist, ny = dy / dist;
             let dot = ball.vx * nx + ball.vy * ny;
             ball.vx -= 2 * dot * nx; ball.vy -= 2 * dot * ny;
             ball.x = 150 + nx * maxDist; ball.y = 150 + ny * maxDist;
 
-            // Плавно увеличиваем множитель с каждым ударом
             escapeMultiplier += 0.10;
             if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 
-            // ДОСТИГЛИ СЕРВЕРНОГО МНОЖИТЕЛЯ -> Исход
             if (escapeMultiplier >= serverTargetMultiplier) {
                 escapeMultiplier = serverTargetMultiplier;
                 
                 if (serverIsWin) {
                     escapeState = 'ESCAPING';
-                    // Направляем шарик в открытую дырку
                     let targetX = 70, targetY = 270;
                     let fDx = targetX - ball.x, fDy = targetY - ball.y, fDist = Math.sqrt(fDx*fDx + fDy*fDy);
                     ball.vx = (fDx / fDist) * 8.0; ball.vy = (fDy / fDist) * 8.0;
                     setTimeout(() => finishEscapeGame(finalBalance), 600);
                 } else {
-                    // Краш
                     escapeState = 'CRASH';
                     ball.vx = 0; ball.vy = 0;
                     setTimeout(() => finishEscapeGame(finalBalance), 500);
@@ -165,7 +145,7 @@ function runEscapeLoop(finalBalance) {
         floatingAnim.y = floatingAnim.startY + (floatingAnim.targetY - floatingAnim.startY) * t - Math.sin(t * Math.PI) * 60;
         if (t >= 1) {
             escapeState = 'IDLE'; floatingAnim.active = false;
-            updateBalance(finalBalance); // Финальное обновление баланса
+            updateBalance(finalBalance);
             if (escapeActionBtn) {
                 escapeActionBtn.innerText = "Играть"; 
                 escapeActionBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
@@ -187,7 +167,6 @@ function drawEscapeFrame() {
     escapeCtx.save(); escapeCtx.translate(150, 150); escapeCtx.rotate(ringRotation);
     escapeCtx.beginPath();
     
-    // Если краш - кольцо становится красным
     let arcEnd = (escapeState === 'PLAYING' || escapeState === 'ESCAPING') ? (Math.PI * 2 - 0.2) : (Math.PI * 2);
     escapeCtx.arc(0, 0, ringRadius, 0.2, arcEnd, false);
     escapeCtx.strokeStyle = (escapeState === 'CRASH') ? '#ef4444' : '#38bdf8'; 

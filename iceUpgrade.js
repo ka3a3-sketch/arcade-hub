@@ -1,4 +1,6 @@
-import { tg, score, updateBalance, addCashback, isDemoMode, showToast, API_BASE_URL } from './core.js';
+// --- START OF FILE iceUpgrade.js ---
+
+import { tg, score, updateBalance, addCashback, isDemoMode, showToast, apiCall } from './core.js';
 
 const upgradeCanvas = document.getElementById('upgradeCanvas');
 const upgradeCtx = upgradeCanvas ? upgradeCanvas.getContext('2d') : null;
@@ -8,7 +10,7 @@ const upgradeChanceVal = document.getElementById('upgradeChanceVal');
 const upgradeMultVal = document.getElementById('upgradeMultVal');
 const upgradeActionBtn = document.getElementById('upgradeActionBtn');
 
-let upgradeState = 'IDLE'; // IDLE, AIMING, SPINNING, FINISHED
+let upgradeState = 'IDLE'; 
 let upgradeChance = 50; 
 let upgradeMultiplier = 1.96;
 
@@ -38,21 +40,6 @@ botAvatarImg.onload = function() { isBotAvatarLoaded = true; if (upgradeState ==
 if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url) {
     userAvatarImg.src = tg.initDataUnsafe.user.photo_url;
     userAvatarImg.onload = function() { isUserAvatarLoaded = true; if (upgradeState === 'IDLE') redraw(); };
-}
-
-// API Вызов
-async function apiCall(endpoint, payload) {
-    if (!tg || !tg.initData) return null;
-    try {
-        let res = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': tg.initData },
-            body: JSON.stringify(payload)
-        });
-        return await res.json();
-    } catch (e) {
-        return null;
-    }
 }
 
 function syncCanvasSize() {
@@ -259,7 +246,6 @@ function drawAvatarCircle(img, x, y, r, borderCol, isLoaded, isUser) {
     upgradeCtx.restore();
 }
 
-
 window.startIceUpgrade = async function startIceUpgrade() {
     if (upgradeState !== 'IDLE') return;
     
@@ -277,7 +263,6 @@ window.startIceUpgrade = async function startIceUpgrade() {
         upgradeActionBtn.style.background = "#4b5563";
     }
 
-    // 1. ОТПРАВЛЯЕМ ЗАПРОС НА СЕРВЕР (Он решит исход игры)
     let response = await apiCall('/api/upgrade/play', { bet: betVal, chance: upgradeChance, is_demo: isDemoMode });
     
     if (!response || response.error) {
@@ -286,8 +271,7 @@ window.startIceUpgrade = async function startIceUpgrade() {
         return;
     }
 
-    // Сервер уже списал ставку и определил победителя
-    updateBalance(response.new_balance - response.win_amount); // Показываем баланс без выигрыша во время полета
+    updateBalance(response.new_balance - response.win_amount); 
     addCashback(betVal * 0.15);
 
     upgradeState = 'AIMING';
@@ -300,14 +284,13 @@ window.startIceUpgrade = async function startIceUpgrade() {
 
     cancelAnimationFrame(upgradeAnimId);
     
-    // 2. ЗАПУСКАЕМ АНИМАЦИЮ (с передачей ответа сервера)
     runAimingLoop(response);
 };
 
 function runAimingLoop(serverResponse) {
     if (upgradeState !== 'AIMING') return;
     let elapsed = performance.now() - aimStartTime;
-    let progress = Math.min(elapsed / 1500, 1.0); // 1.5 сек анимация прицеливания
+    let progress = Math.min(elapsed / 1500, 1.0); 
     let easeProgress = 1 - Math.pow(1 - progress, 2);
     let totalSpins = Math.PI * 2 * 3;
     let currentArrowAngle = (totalSpins * easeProgress + finalAimAngle * progress) % (Math.PI * 2);
@@ -321,7 +304,6 @@ function runAimingLoop(serverResponse) {
     }
 }
 
-// Переменные для управляемого полета
 let flightProgress = 0;
 let startFlyX = WORLD_SIZE / 2;
 let startFlyY = WORLD_SIZE / 2;
@@ -332,7 +314,6 @@ function startPuckFlight(serverResponse) {
     upgradeState = 'SPINNING';
     const geo = getSectorGeometry(upgradeChance);
     
-    // Куда лететь шайбе? Решает сервер!
     if (serverResponse.is_win) {
         targetFlyX = geo.greenCentroid.x + (Math.random() * 60 - 30);
         targetFlyY = geo.greenCentroid.y + (Math.random() * 60 - 30);
@@ -349,12 +330,10 @@ function startPuckFlight(serverResponse) {
 function runFlightLoop(serverResponse) {
     if (upgradeState !== 'SPINNING') return;
 
-    flightProgress += 0.015; // Скорость полета
+    flightProgress += 0.015; 
     if (flightProgress >= 1.0) flightProgress = 1.0;
 
     let ease = 1 - Math.pow(1 - flightProgress, 3);
-    
-    // Добавляем красивую кривую в полет
     let curve = Math.sin(flightProgress * Math.PI) * 120;
     
     upgradePuck.x = startFlyX + (targetFlyX - startFlyX) * ease + curve;
@@ -388,7 +367,6 @@ function resolveWinner(serverResponse) {
 
     drawFrame(upgradePuck.x, upgradePuck.y, 2.0, 0, false);
     
-    // Обновляем баланс финально
     updateBalance(serverResponse.new_balance);
 
     if (serverResponse.is_win) {

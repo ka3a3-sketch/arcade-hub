@@ -1,3 +1,5 @@
+# --- START OF FILE bot.py ---
+
 import os
 import hmac
 import hashlib
@@ -5,7 +7,7 @@ import json
 import logging
 import random
 import asyncio
-from urllib.parse import parse_qsl
+from urllib.parse import unquote
 import aiosqlite
 import aiohttp
 from aiohttp import web
@@ -18,9 +20,12 @@ from aiogram.types import MenuButtonWebApp, WebAppInfo
 TOKEN = os.getenv("BOT_TOKEN", "9015659427:AAEHv6oruPJswEq_q4_F0999F_ixYtIz538")
 GAME_URL = "https://ka3a3-sketch.github.io/arcade-hub/"
 
-# ВАЖНО: Настройки для работы на Render и других облачных сервисах
+# Настройки для работы на Render и других облачных сервисах
 WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = int(os.getenv("PORT", 8081))
+
+# ВАЖНО: Если есть примонтированный диск (на Render), база сохранится там. Иначе локально.
+DB_PATH = "/data/database.db" if os.path.exists("/data") else "database.db"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -31,7 +36,7 @@ active_mines_games = {}
 
 # --- БАЗА ДАННЫХ ---
 async def init_db():
-    async with aiosqlite.connect("database.db") as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -43,7 +48,7 @@ async def init_db():
         await db.commit()
 
 async def get_user(user_id):
-    async with aiosqlite.connect("database.db") as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         await db.commit()
         async with db.execute("SELECT balance, demo_balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -52,7 +57,7 @@ async def get_user(user_id):
 
 async def update_balance(user_id, amount, is_demo=False):
     column = "demo_balance" if is_demo else "balance"
-    async with aiosqlite.connect("database.db") as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(f"UPDATE users SET {column} = {column} + ? WHERE user_id = ?", (amount, user_id))
         await db.commit()
         async with db.execute(f"SELECT {column} FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -61,17 +66,31 @@ async def update_balance(user_id, amount, is_demo=False):
 
 # --- ВАЛИДАЦИЯ ---
 def validate_telegram_data(init_data: str) -> dict:
+    if not init_data:
+        return None
     try:
-        parsed_data = dict(parse_qsl(init_data))
-        if "hash" not in parsed_data: return None
+        parsed_data = {}
+        for chunk in init_data.split('&'):
+            if '=' in chunk:
+                k, v = chunk.split('=', 1)
+                parsed_data[k] = unquote(v) # Безопасный декод URL
+
+        if "hash" not in parsed_data: 
+            return None
+            
         hash_received = parsed_data.pop("hash")
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items()))
+        
         secret_key = hmac.new(b"WebAppData", TOKEN.encode(), hashlib.sha256).digest()
         hash_calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        
         if hash_calculated == hash_received:
             return json.loads(parsed_data.get("user", "{}"))
+        
+        logging.warning("Хэш не совпадает! Проверьте BOT_TOKEN.")
         return None
-    except Exception:
+    except Exception as e:
+        logging.error(f"Ошибка валидации данных ТГ: {e}")
         return None
 
 # --- МАТЕМАТИКА МИН ---
@@ -189,7 +208,7 @@ async def cmd_start(message: types.Message):
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
         if str(referrer_id) != str(user_id):
-            async with aiosqlite.connect("database.db") as db:
+            async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute("UPDATE users SET referrer_id = ? WHERE user_id = ? AND referrer_id IS NULL", (referrer_id, user_id))
                 await db.commit()
 

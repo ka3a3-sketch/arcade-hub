@@ -1,4 +1,6 @@
-import { tg, score, updateBalance, addCashback, isDemoMode, showToast, API_BASE_URL } from './core.js';
+// --- START OF FILE mines.js ---
+
+import { tg, score, updateBalance, addCashback, isDemoMode, showToast, apiCall } from './core.js';
 
 let gridSize = 25, minesGameStarted = false, minesGameOver = false;
 let currentBet = 0.25, mineCount = 3, currentMultiplier = 1.0;
@@ -9,26 +11,6 @@ const betInput = document.getElementById('betInput');
 const minesInput = document.getElementById('minesInput');
 const minesMultiplierEl = document.getElementById('minesMultiplier');
 const minesWinAmountEl = document.getElementById('minesWinAmount');
-
-// Вспомогательная функция для API запросов
-async function apiCall(endpoint, payload) {
-    if (!tg || !tg.initData) return null;
-    try {
-        let res = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': tg.initData 
-            },
-            body: JSON.stringify(payload)
-        });
-        return await res.json();
-    } catch (e) {
-        console.error(`API Error (${endpoint}):`, e);
-        showToast("Ошибка связи с сервером", false);
-        return null;
-    }
-}
 
 window.setBetPercent = function(percent) {
     if (minesGameStarted) return;
@@ -73,7 +55,6 @@ window.startGame = async function startGame() {
     
     if (score < currentBet) { showToast('Недостаточно средств!', false); return; }
 
-    // Делаем запрос на сервер для старта
     if (actionBtn) {
         actionBtn.innerText = "Запуск...";
         actionBtn.style.background = "#64748b";
@@ -88,9 +69,8 @@ window.startGame = async function startGame() {
         return;
     }
 
-    // Успешный старт
-    updateBalance(response.new_balance); // Сервер вернул баланс с вычетом ставки
-    addCashback(currentBet * 0.15); // Кешбек оставляем локальным пока (для UI)
+    updateBalance(response.new_balance); 
+    addCashback(currentBet * 0.15); 
 
     minesGameStarted = true; 
     minesGameOver = false; 
@@ -119,22 +99,23 @@ async function clickCell(index, cell) {
     
     let currencyName = isDemoMode ? "DEMO" : "GRAM";
 
-    // Сразу рисуем анимацию загрузки/ожидания ответа? Нет, сразу отправляем запрос.
     let response = await apiCall('/api/mines/click', { index: index });
-    if (!response || response.error) return;
+    
+    if (!response || response.error) {
+        showToast(response?.error || "Ошибка клика", false);
+        return;
+    }
 
     cell.classList.add('revealed');
 
     if (response.status === 'loss') {
-        // Проиграл
         cell.classList.add('mine'); cell.innerText = 'X';
         minesGameOver = true; minesGameStarted = false;
-        revealAllMines(response.board); // Рисуем все мины по ответу сервера
+        revealAllMines(response.board); 
         resetUI();
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
     } 
     else if (response.status === 'continue' || response.status === 'win') {
-        // Угадал
         cell.classList.add('safe'); cell.innerText = '+';
         currentMultiplier = response.multiplier || currentMultiplier;
         
@@ -148,7 +129,6 @@ async function clickCell(index, cell) {
 
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('light');
 
-        // Авто-выигрыш (открыты все безопасные ячейки)
         if (response.status === 'win') {
             minesGameOver = true; minesGameStarted = false;
             updateBalance(response.new_balance);
@@ -167,7 +147,9 @@ async function cashOut() {
     actionBtn.disabled = true;
 
     let response = await apiCall('/api/mines/cashout', {});
+    
     if (!response || response.error) {
+        showToast(response?.error || "Ошибка при выводе", false);
         actionBtn.disabled = false;
         return;
     }

@@ -1,7 +1,46 @@
+// --- START OF FILE core.js ---
+
 export let tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 if (tg) { tg.expand(); }
 
 export const API_BASE_URL = "https://arcade-hub-api-o1jd.onrender.com";
+
+// Универсальная функция API с защитой от зависаний (тайм-аут 10 секунд)
+export async function apiCall(endpoint, payload = null, method = 'POST') {
+    if (!tg || !tg.initData) {
+        showToast("Запустите игру внутри Telegram!", false);
+        return { error: "Not in Telegram environment" };
+    }
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        let options = {
+            method: method,
+            headers: { 'Authorization': tg.initData },
+            signal: controller.signal
+        };
+
+        if (payload) {
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(payload);
+        }
+
+        let res = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+            if (res.status === 401) return { error: "Ошибка авторизации: неверный токен" };
+            return { error: `Ошибка сервера: ${res.status}` };
+        }
+        
+        return await res.json();
+    } catch (e) {
+        if (e.name === 'AbortError') return { error: "Сервер не отвечает (тайм-аут)" };
+        return { error: "Ошибка сети или сервер недоступен" };
+    }
+}
 
 export let userName = "Игрок";
 export let userHandle = "@username";
@@ -38,21 +77,15 @@ const balanceEl = document.getElementById('balance');
 const profileBalanceEl = document.getElementById('profile-balance');
 
 export async function syncBalance() {
-    if (!tg || !tg.initData) return;
-    try {
-        let response = await fetch(`${API_BASE_URL}/api/balance`, {
-            method: 'GET',
-            headers: { 'Authorization': tg.initData }
-        });
-        if (response.ok) {
-            let data = await response.json();
-            realScore = parseFloat(data.balance);
-            demoScore = parseFloat(data.demo_balance);
-            score = isDemoMode ? demoScore : realScore;
-            updateBalanceUI();
-        }
-    } catch (e) {
-        console.error("Ошибка подключения к серверу API:", e);
+    let data = await apiCall('/api/balance', null, 'GET');
+    
+    if (data && !data.error) {
+        realScore = parseFloat(data.balance);
+        demoScore = parseFloat(data.demo_balance);
+        score = isDemoMode ? demoScore : realScore;
+        updateBalanceUI();
+    } else {
+        console.error("Ошибка загрузки баланса:", data?.error);
     }
 }
 
