@@ -17,11 +17,11 @@ const CY = 160;
 const RING_RADIUS = 100;
 const BALL_RADIUS = 12;
 
-// Разрыв кольца (10-11 часов: от -2.7 до -2.1 радиан)
+// Разрыв кольца (базовые углы от -2.7 до -2.1 радиан)
 const GAP_START = -2.7;
 const GAP_END = -2.1;
 
-// Инициализация Canvas (КРИТИЧЕСКИ ВАЖНО ДЛЯ ПРЕДОТВРАЩЕНИЯ ЧЕРНОГО ЭКРАНА)
+// Инициализация Canvas
 if (escapeCanvas) {
     escapeCanvas.width = W;
     escapeCanvas.height = H;
@@ -36,6 +36,7 @@ let engineRunning = false;
 
 // Векторная физика
 let ball = { x: CX, y: CY, vx: 0, vy: 0 };
+let ringRotation = 0; // Текущий угол поворота кольца
 let trail = [];
 let particles = [];
 let ringFlash = 0;
@@ -45,12 +46,12 @@ let floatingUI = { active: false, text: "", color: "", y: 0, alpha: 0 };
 // --- БЕЗОПАСНАЯ ЗАГРУЗКА АВАТАРКИ ---
 let avatarLoaded = false;
 const avatarImg = new Image();
-avatarImg.crossOrigin = "Anonymous"; // Предотвращение CORS-паник
+avatarImg.crossOrigin = "Anonymous";
 try {
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     if (tgUser && tgUser.photo_url) {
         avatarImg.onload = () => { avatarLoaded = true; };
-        avatarImg.onerror = () => { avatarLoaded = false; }; // Fallback
+        avatarImg.onerror = () => { avatarLoaded = false; }; 
         avatarImg.src = tgUser.photo_url;
     }
 } catch (e) {
@@ -81,7 +82,6 @@ window.maxEscapeBet = function() {
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 };
 
-// Хард-сброс и запуск движка при переходе на экран игры
 export function resetEscapeVisuals() {
     if (!escapeCtx) return;
     gameState = 'IDLE';
@@ -90,18 +90,17 @@ export function resetEscapeVisuals() {
     trail = [];
     particles = [];
     floatingUI.active = false;
-    ball = { x: CX, y: CY, vx: 0, vy: 0 }; // Возврат в центр
+    ball = { x: CX, y: CY, vx: 0, vy: 0 }; 
     
     updateEscapeBalanceUI();
     
-    // Запускаем перманентный цикл, если он еще не работает
     if (!engineRunning) {
         engineRunning = true;
         requestAnimationFrame(physicsEngineLoop);
     }
 }
 
-// --- СТАРТ РАУНДА (ИНЪЕКЦИЯ ХАОСА) ---
+// --- СТАРТ РАУНДА ---
 window.startEscapeGame = function() {
     if (gameState === 'PLAYING' || !escapeBetInput) return;
     
@@ -109,12 +108,10 @@ window.startEscapeGame = function() {
     if (currentBetAmount < 0.10) { showToast('Мин. ставка 0.10!', false); return; }
     if (score < currentBetAmount) { showToast('Недостаточно средств!', false); return; }
 
-    // Списание ставки
     updateBalance(score - currentBetAmount);
     updateEscapeBalanceUI();
     addCashback(currentBetAmount * 0.15);
 
-    // Сброс физики раунда
     gameState = 'PLAYING';
     escapeMultiplier = 0.00;
     isEscaped = false;
@@ -124,27 +121,30 @@ window.startEscapeGame = function() {
     ringFlash = 0;
     multScale = 1.0;
     
-    // Блокировка кнопки
     if (escapeActionBtn) {
         escapeActionBtn.innerText = "В игре...";
         escapeActionBtn.style.background = "#374151";
         escapeActionBtn.style.pointerEvents = "none";
     }
 
-    // Спавн с непредсказуемым вектором
+    // Более агрессивный стартовый импульс
     ball.x = CX + (Math.random() - 0.5) * 10;
     ball.y = CY + (Math.random() - 0.5) * 10;
     let angle = Math.random() * Math.PI * 2;
-    let speed = 6.0 + Math.random() * 2.0;
+    let speed = 9.0 + Math.random() * 2.5; // Увеличена базовая скорость
     ball.vx = Math.cos(angle) * speed;
     ball.vy = Math.sin(angle) * speed;
 
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 };
 
-// --- ФИЗИЧЕСКИЙ ДВИЖОК (БЕЗОПАСНЫЙ ЦИКЛ 60 FPS) ---
+// --- БЕЗОПАСНЫЙ ЦИКЛ 60 FPS ---
 function physicsEngineLoop() {
     try {
+        // Кольцо вращается постоянно
+        ringRotation += 0.025;
+        if (ringRotation > Math.PI * 2) ringRotation -= Math.PI * 2;
+
         if (gameState === 'IDLE') {
             // Левитация до старта
             ball.x = CX;
@@ -159,11 +159,10 @@ function physicsEngineLoop() {
         console.error("Canvas Render Error:", error);
     }
     
-    // Бесконечный цикл, гарантирующий живой экран
     requestAnimationFrame(physicsEngineLoop);
 }
 
-// --- ЯДРО ВЕКТОРНОЙ ФИЗИКИ ---
+// --- ЯДРО ВЕКТОРНОЙ ФИЗИКИ С ДЖИТТЕРОМ ---
 function updatePhysics() {
     ball.x += ball.vx;
     ball.y += ball.vy;
@@ -175,10 +174,17 @@ function updatePhysics() {
     if (!isEscaped) {
         // Коллизия с внутренним краем кольца
         if (dist + BALL_RADIUS >= RING_RADIUS) {
-            let angle = Math.atan2(dy, dx);
+            let globalAngle = Math.atan2(dy, dx);
             
+            // Переводим глобальный угол удара в локальную систему координат вращающегося кольца
+            let localAngle = globalAngle - ringRotation;
+            
+            // Нормализация угла до диапазона [-PI, PI]
+            while (localAngle <= -Math.PI) localAngle += Math.PI * 2;
+            while (localAngle > Math.PI) localAngle -= Math.PI * 2;
+
             // Проверка на попадание в разрыв
-            if (angle > GAP_START && angle < GAP_END) {
+            if (localAngle >= GAP_START && localAngle <= GAP_END) {
                 isEscaped = true; // Свобода!
                 createExplosion(ball.x, ball.y, '#3B82F6', 15);
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
@@ -188,29 +194,33 @@ function updatePhysics() {
                 let ny = dy / dist;
                 let dot = ball.vx * nx + ball.vy * ny;
                 
-                ball.vx -= 2 * dot * nx;
-                ball.vy -= 2 * dot * ny;
+                // Идеальный вектор рикошета
+                let rvx = ball.vx - 2 * dot * nx;
+                let rvy = ball.vy - 2 * dot * ny;
                 
-                // Микро-хаос отскока (изменение угла)
-                let speed = Math.hypot(ball.vx, ball.vy);
-                let newAngle = Math.atan2(ball.vy, ball.vx) + (Math.random() - 0.5) * 0.15;
+                // Агрессивный хаос: сильный случайный разброс угла отражения
+                let speed = Math.hypot(rvx, rvy);
+                let currentAngle = Math.atan2(rvy, rvx);
+                let chaoticJitter = (Math.random() - 0.5) * 0.45; // Сильное отклонение
+                let newAngle = currentAngle + chaoticJitter;
+
                 ball.vx = Math.cos(newAngle) * speed;
                 ball.vy = Math.sin(newAngle) * speed;
 
                 // Защита от залипания
-                ball.x = CX + nx * (RING_RADIUS - BALL_RADIUS - 1);
-                ball.y = CY + ny * (RING_RADIUS - BALL_RADIUS - 1);
+                ball.x = CX + nx * (RING_RADIUS - BALL_RADIUS - 1.5);
+                ball.y = CY + ny * (RING_RADIUS - BALL_RADIUS - 1.5);
 
                 escapeMultiplier += 0.10;
                 ringFlash = 1.0;
                 multScale = 1.4;
-                createExplosion(ball.x, ball.y, '#00F2FE', 5);
+                createExplosion(ball.x, ball.y, '#00F2FE', 6);
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             }
         }
     } else {
         // --- ПОВЕДЕНИЕ СНАРУЖИ КОЛЬЦА ---
-        ball.vy += 0.25; // Гравитация
+        ball.vy += 0.35; // Усиленная гравитация
 
         // Рикошет от внешних стен экрана
         if (ball.x - BALL_RADIUS < 0) {
@@ -219,12 +229,12 @@ function updatePhysics() {
             ball.x = W - BALL_RADIUS; ball.vx *= -0.7;
         }
 
-        // Внешняя коллизия с кольцом (шарик может удариться об кольцо снаружи)
+        // Внешняя коллизия с кольцом (отскок от крыши)
         if (dist - BALL_RADIUS <= RING_RADIUS && dist > RING_RADIUS - BALL_RADIUS * 2) {
             let nx = dx / dist;
             let ny = dy / dist;
             let dot = ball.vx * nx + ball.vy * ny;
-            if (dot < 0) { // Вектор направлен внутрь препятствия
+            if (dot < 0) { 
                 ball.vx -= 2 * dot * nx;
                 ball.vy -= 2 * dot * ny;
                 ball.x = CX + nx * (RING_RADIUS + BALL_RADIUS + 1);
@@ -239,7 +249,7 @@ function updatePhysics() {
         }
     }
 
-    // Генерация хвоста кометы
+    // Хвост кометы
     trail.unshift({ x: ball.x, y: ball.y, alpha: 1.0 });
     if (trail.length > 15) trail.pop();
 }
@@ -249,7 +259,7 @@ function updateEffects() {
     
     particles.forEach(p => {
         p.x += p.vx; p.y += p.vy;
-        p.vy += 0.1; // Гравитация частиц
+        p.vy += 0.15; 
         p.life -= p.decay;
     });
     particles = particles.filter(p => p.life > 0);
@@ -263,7 +273,7 @@ function updateEffects() {
     }
 }
 
-// --- ЛОГИКА ФИНИША И СБРОС КНОПОК ---
+// --- ЛОГИКА ФИНИША И СБРОС ---
 function finishRound() {
     gameState = 'FINISHED';
     
@@ -271,7 +281,7 @@ function finishRound() {
     let winAmount = isWin ? currentBetAmount * escapeMultiplier : 0;
     let color = isWin ? '#10B981' : '#EF4444';
 
-    createExplosion(ball.x, ball.y, color, 40);
+    createExplosion(ball.x, ball.y, color, 45);
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(isWin ? 'success' : 'error');
 
     if (isWin && winAmount > 0) {
@@ -288,7 +298,6 @@ function finishRound() {
         alpha: 1.0
     };
 
-    // ВОССТАНОВЛЕНИЕ КНОПКИ
     if (escapeActionBtn) {
         escapeActionBtn.innerText = "Играть";
         escapeActionBtn.style.background = "#10B981";
@@ -299,7 +308,7 @@ function finishRound() {
 function createExplosion(x, y, color, count) {
     for (let i = 0; i < count; i++) {
         let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 5 + 1;
+        let speed = Math.random() * 6 + 2;
         particles.push({
             x: x, y: y,
             vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
@@ -308,11 +317,10 @@ function createExplosion(x, y, color, count) {
     }
 }
 
-// --- ГРАФИЧЕСКИЙ РЕНДЕР (НЕ ПАДАЕТ ДАЖЕ ЕСЛИ КАРТИНКИ НЕТ) ---
+// --- ГРАФИЧЕСКИЙ РЕНДЕР ---
 function renderGraphics() {
     if (!escapeCtx) return;
     
-    // Фон
     escapeCtx.fillStyle = '#0D0F12';
     escapeCtx.fillRect(0, 0, W, H);
 
@@ -339,9 +347,13 @@ function renderGraphics() {
     escapeCtx.fillStyle = '#EF4444'; escapeCtx.font = '900 16px sans-serif'; escapeCtx.textAlign = 'center';
     escapeCtx.fillText('💀 LOSE', CX + CX/2, H - 20);
 
-    // 2. Синее Неоновое Кольцо
+    // 2. Вращающееся Неоновое Кольцо
+    let currentGapStart = GAP_START + ringRotation;
+    let currentGapEnd = GAP_END + ringRotation;
+
     escapeCtx.beginPath();
-    escapeCtx.arc(CX, CY, RING_RADIUS, GAP_END, GAP_START, false);
+    // Отрисовка сплошной части кольца
+    escapeCtx.arc(CX, CY, RING_RADIUS, currentGapEnd, currentGapStart, false);
     
     let ringBrightness = Math.floor(Math.max(0, ringFlash) * 155);
     escapeCtx.strokeStyle = `rgb(${59 + ringBrightness}, ${130 + ringBrightness}, 246)`; 
@@ -352,9 +364,10 @@ function renderGraphics() {
     escapeCtx.stroke();
     escapeCtx.shadowBlur = 0;
 
+    // Светящиеся точки на краях разрыва
     escapeCtx.fillStyle = '#00F2FE';
-    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(GAP_START)*RING_RADIUS, CY + Math.sin(GAP_START)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
-    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(GAP_END)*RING_RADIUS, CY + Math.sin(GAP_END)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
+    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapStart)*RING_RADIUS, CY + Math.sin(currentGapStart)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
+    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapEnd)*RING_RADIUS, CY + Math.sin(currentGapEnd)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
 
     // 3. Множитель (Статичен в IDLE, иначе пульсирует)
     escapeCtx.save();
@@ -397,7 +410,7 @@ function renderGraphics() {
     escapeCtx.globalAlpha = 1.0;
     escapeCtx.shadowBlur = 0;
 
-    // 6. Шарик (Аватар или Фолбэк)
+    // 6. Шарик
     escapeCtx.save();
     escapeCtx.translate(ball.x, ball.y);
     if (gameState === 'PLAYING' || gameState === 'FINISHED') {
@@ -417,7 +430,6 @@ function renderGraphics() {
     if (avatarLoaded) {
         escapeCtx.drawImage(avatarImg, -BALL_RADIUS, -BALL_RADIUS, BALL_RADIUS*2, BALL_RADIUS*2);
     } else {
-        // ИдеальныйFallback-градиент
         let bgGrad = escapeCtx.createLinearGradient(-BALL_RADIUS, -BALL_RADIUS, BALL_RADIUS, BALL_RADIUS);
         bgGrad.addColorStop(0, '#00F2FE');
         bgGrad.addColorStop(1, '#3B82F6');
@@ -446,7 +458,6 @@ function renderGraphics() {
     }
 }
 
-// Запускаем движок сразу после загрузки файла
 resetEscapeVisuals();
 
 // --- END OF FILE escape.js ---
