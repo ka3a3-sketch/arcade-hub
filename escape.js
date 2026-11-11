@@ -2,14 +2,12 @@
 
 import { tg, score, updateBalance, addCashback, isDemoMode, showToast, initials } from './core.js';
 
-// Элементы DOM
 const escapeCanvas = document.getElementById('escapeCanvas');
 const escapeCtx = escapeCanvas ? escapeCanvas.getContext('2d') : null;
 const escapeBetInput = document.getElementById('escapeBetInput');
 const escapeActionBtn = document.getElementById('escapeActionBtn');
 const escapeBalanceDisplay = document.getElementById('escapeBalanceDisplay');
 
-// Жесткие константы пространства
 const W = 380;
 const H = 420;
 const CX = W / 2;
@@ -17,33 +15,32 @@ const CY = 160;
 const RING_RADIUS = 100;
 const BALL_RADIUS = 12;
 
-// Разрыв кольца (базовые углы от -2.7 до -2.1 радиан)
 const GAP_START = -2.7;
 const GAP_END = -2.1;
 
-// Инициализация Canvas
 if (escapeCanvas) {
     escapeCanvas.width = W;
     escapeCanvas.height = H;
 }
 
-// Состояние игры
-let gameState = 'IDLE'; // IDLE, PLAYING, FINISHED
+let gameState = 'IDLE'; 
 let escapeMultiplier = 0.00;
 let currentBetAmount = 0.10;
 let isEscaped = false;
 let engineRunning = false;
 
-// Векторная физика
+// ФИЗИКА (НЕТРОНУТАЯ)
 let ball = { x: CX, y: CY, vx: 0, vy: 0 };
-let ringRotation = 0; // Текущий угол поворота кольца
+let ringRotation = 0; 
+
+// ЭФФЕКТЫ (РАСШИРЕНО ДЛЯ ААА ГРАФИКИ)
 let trail = [];
 let particles = [];
+let shockwaves = []; // Новая система ударных волн
 let ringFlash = 0;
 let multScale = 1.0;
 let floatingUI = { active: false, text: "", color: "", y: 0, alpha: 0 };
 
-// --- БЕЗОПАСНАЯ ЗАГРУЗКА АВАТАРКИ ---
 let avatarLoaded = false;
 const avatarImg = new Image();
 avatarImg.crossOrigin = "Anonymous";
@@ -55,11 +52,9 @@ try {
         avatarImg.src = tgUser.photo_url;
     }
 } catch (e) {
-    console.warn("Avatar load bypassed:", e);
     avatarLoaded = false;
 }
 
-// --- UI И ВЗАИМОДЕЙСТВИЕ ---
 export function updateEscapeBalanceUI() {
     if (escapeBalanceDisplay) {
         let currency = isDemoMode ? "DEMO" : "GRAM";
@@ -89,18 +84,16 @@ export function resetEscapeVisuals() {
     isEscaped = false;
     trail = [];
     particles = [];
+    shockwaves = [];
     floatingUI.active = false;
     ball = { x: CX, y: CY, vx: 0, vy: 0 }; 
-    
     updateEscapeBalanceUI();
-    
     if (!engineRunning) {
         engineRunning = true;
         requestAnimationFrame(physicsEngineLoop);
     }
 }
 
-// --- СТАРТ РАУНДА ---
 window.startEscapeGame = function() {
     if (gameState === 'PLAYING' || !escapeBetInput) return;
     
@@ -117,38 +110,36 @@ window.startEscapeGame = function() {
     isEscaped = false;
     trail = [];
     particles = [];
+    shockwaves = [];
     floatingUI.active = false;
     ringFlash = 0;
     multScale = 1.0;
     
     if (escapeActionBtn) {
-        escapeActionBtn.innerText = "В игре...";
+        escapeActionBtn.innerText = "В ИГРЕ...";
         escapeActionBtn.style.background = "#374151";
+        escapeActionBtn.style.boxShadow = "none";
         escapeActionBtn.style.pointerEvents = "none";
     }
 
-    // Более агрессивный стартовый импульс
     ball.x = CX + (Math.random() - 0.5) * 10;
     ball.y = CY + (Math.random() - 0.5) * 10;
     let angle = Math.random() * Math.PI * 2;
-    let speed = 9.0 + Math.random() * 2.5; // Увеличена базовая скорость
+    let speed = 9.0 + Math.random() * 2.5; 
     ball.vx = Math.cos(angle) * speed;
     ball.vy = Math.sin(angle) * speed;
 
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 };
 
-// --- БЕЗОПАСНЫЙ ЦИКЛ 60 FPS ---
 function physicsEngineLoop() {
     try {
-        // Кольцо вращается постоянно
         ringRotation += 0.025;
         if (ringRotation > Math.PI * 2) ringRotation -= Math.PI * 2;
 
         if (gameState === 'IDLE') {
-            // Левитация до старта
             ball.x = CX;
-            ball.y = CY + Math.sin(Date.now() / 300) * 5;
+            ball.y = CY + Math.sin(Date.now() / 400) * 6; // Плавная левитация
         } else if (gameState === 'PLAYING') {
             updatePhysics();
         }
@@ -158,12 +149,11 @@ function physicsEngineLoop() {
     } catch (error) {
         console.error("Canvas Render Error:", error);
     }
-    
     requestAnimationFrame(physicsEngineLoop);
 }
 
-// --- ЯДРО ВЕКТОРНОЙ ФИЗИКИ С ДЖИТТЕРОМ ---
 function updatePhysics() {
+    // ЛОГИКА 100% НЕТРОНУТА
     ball.x += ball.vx;
     ball.y += ball.vy;
 
@@ -172,64 +162,56 @@ function updatePhysics() {
     let dist = Math.hypot(dx, dy);
 
     if (!isEscaped) {
-        // Коллизия с внутренним краем кольца
         if (dist + BALL_RADIUS >= RING_RADIUS) {
             let globalAngle = Math.atan2(dy, dx);
-            
-            // Переводим глобальный угол удара в локальную систему координат вращающегося кольца
             let localAngle = globalAngle - ringRotation;
             
-            // Нормализация угла до диапазона [-PI, PI]
             while (localAngle <= -Math.PI) localAngle += Math.PI * 2;
             while (localAngle > Math.PI) localAngle -= Math.PI * 2;
 
-            // Проверка на попадание в разрыв
             if (localAngle >= GAP_START && localAngle <= GAP_END) {
-                isEscaped = true; // Свобода!
-                createExplosion(ball.x, ball.y, '#3B82F6', 15);
+                isEscaped = true; 
+                createExplosion(ball.x, ball.y, '#38BDF8', 20);
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
             } else {
-                // Честное отражение вектора от нормали
                 let nx = dx / dist;
                 let ny = dy / dist;
                 let dot = ball.vx * nx + ball.vy * ny;
                 
-                // Идеальный вектор рикошета
                 let rvx = ball.vx - 2 * dot * nx;
                 let rvy = ball.vy - 2 * dot * ny;
                 
-                // Агрессивный хаос: сильный случайный разброс угла отражения
                 let speed = Math.hypot(rvx, rvy);
                 let currentAngle = Math.atan2(rvy, rvx);
-                let chaoticJitter = (Math.random() - 0.5) * 0.45; // Сильное отклонение
+                let chaoticJitter = (Math.random() - 0.5) * 0.45; 
                 let newAngle = currentAngle + chaoticJitter;
 
                 ball.vx = Math.cos(newAngle) * speed;
                 ball.vy = Math.sin(newAngle) * speed;
 
-                // Защита от залипания
                 ball.x = CX + nx * (RING_RADIUS - BALL_RADIUS - 1.5);
                 ball.y = CY + ny * (RING_RADIUS - BALL_RADIUS - 1.5);
 
                 escapeMultiplier += 0.10;
+                
+                // ВЫЗОВЫ НОВЫХ ЭФФЕКТОВ
                 ringFlash = 1.0;
-                multScale = 1.4;
+                multScale = 1.18; // Пружинящий Punch-эффект
                 createExplosion(ball.x, ball.y, '#00F2FE', 6);
+                shockwaves.push({ x: ball.x, y: ball.y, radius: BALL_RADIUS, alpha: 1.0 }); // Шоквейв
+                
                 if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             }
         }
     } else {
-        // --- ПОВЕДЕНИЕ СНАРУЖИ КОЛЬЦА ---
-        ball.vy += 0.35; // Усиленная гравитация
+        ball.vy += 0.35; 
 
-        // Рикошет от внешних стен экрана
         if (ball.x - BALL_RADIUS < 0) {
             ball.x = BALL_RADIUS; ball.vx *= -0.7;
         } else if (ball.x + BALL_RADIUS > W) {
             ball.x = W - BALL_RADIUS; ball.vx *= -0.7;
         }
 
-        // Внешняя коллизия с кольцом (отскок от крыши)
         if (dist - BALL_RADIUS <= RING_RADIUS && dist > RING_RADIUS - BALL_RADIUS * 2) {
             let nx = dx / dist;
             let ny = dy / dist;
@@ -242,20 +224,18 @@ function updatePhysics() {
             }
         }
 
-        // Финиш - падение в зоны
-        if (ball.y + BALL_RADIUS >= H - 50) {
-            ball.y = H - 50 - BALL_RADIUS;
+        if (ball.y + BALL_RADIUS >= H - 65) { // Подняли пол для красивых зон
+            ball.y = H - 65 - BALL_RADIUS;
             finishRound();
         }
     }
 
-    // Хвост кометы
     trail.unshift({ x: ball.x, y: ball.y, alpha: 1.0 });
-    if (trail.length > 15) trail.pop();
+    if (trail.length > 20) trail.pop();
 }
 
 function updateEffects() {
-    trail.forEach(t => t.alpha -= 0.07);
+    trail.forEach(t => t.alpha -= 0.05);
     
     particles.forEach(p => {
         p.x += p.vx; p.y += p.vy;
@@ -264,24 +244,36 @@ function updateEffects() {
     });
     particles = particles.filter(p => p.life > 0);
 
+    shockwaves.forEach(sw => {
+        sw.radius += 4;
+        sw.alpha -= 0.08;
+    });
+    shockwaves = shockwaves.filter(sw => sw.alpha > 0);
+
     if (ringFlash > 0) ringFlash -= 0.05;
-    if (multScale > 1.0) multScale += (1.0 - multScale) * 0.15;
+    // Spring Animation (Пружина)
+    if (multScale > 1.0) multScale += (1.0 - multScale) * 0.25;
 
     if (floatingUI.active) {
-        floatingUI.y -= 1.2;
+        floatingUI.y -= 1.0;
         floatingUI.alpha -= 0.015;
     }
 }
 
-// --- ЛОГИКА ФИНИША И СБРОС ---
 function finishRound() {
     gameState = 'FINISHED';
     
-    let isWin = ball.x < CX; // Меньше половины X = Зеленая зона (WIN)
+    let isWin = ball.x < CX; 
     let winAmount = isWin ? currentBetAmount * escapeMultiplier : 0;
-    let color = isWin ? '#10B981' : '#EF4444';
-
-    createExplosion(ball.x, ball.y, color, 45);
+    
+    // Элитные партиклы в зависимости от зоны
+    if (isWin) {
+        createExplosion(ball.x, ball.y, '#10B981', 25);
+        createExplosion(ball.x, ball.y, '#FBBF24', 25); // Золото + Зелень
+    } else {
+        createExplosion(ball.x, ball.y, '#EF4444', 40);
+    }
+    
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(isWin ? 'success' : 'error');
 
     if (isWin && winAmount > 0) {
@@ -293,14 +285,15 @@ function finishRound() {
     floatingUI = {
         active: true,
         text: isWin ? `+${winAmount.toFixed(2)} ${currencyName}` : `CRASHED`,
-        color: color,
-        y: ball.y - 30,
+        color: isWin ? '#10B981' : '#EF4444',
+        y: ball.y - 35,
         alpha: 1.0
     };
 
     if (escapeActionBtn) {
-        escapeActionBtn.innerText = "Играть";
-        escapeActionBtn.style.background = "#10B981";
+        escapeActionBtn.innerText = "ИГРАТЬ";
+        escapeActionBtn.style.background = "linear-gradient(180deg, #10B981 0%, #059669 100%)";
+        escapeActionBtn.style.boxShadow = "inset 0 2px 0 rgba(255,255,255,0.2), 0 8px 25px rgba(16,185,129,0.35)";
         escapeActionBtn.style.pointerEvents = "auto";
     }
 }
@@ -312,77 +305,141 @@ function createExplosion(x, y, color, count) {
         particles.push({
             x: x, y: y,
             vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-            color: color, life: 1.0, decay: Math.random() * 0.03 + 0.02
+            color: color, life: 1.0, decay: Math.random() * 0.02 + 0.01
         });
     }
 }
 
-// --- ГРАФИЧЕСКИЙ РЕНДЕР ---
+// --- НОВЫЙ AAA РЕНДЕР ---
 function renderGraphics() {
     if (!escapeCtx) return;
     
-    escapeCtx.fillStyle = '#0D0F12';
+    // 1. Cyber-Background
+    escapeCtx.fillStyle = '#05070A';
+    escapeCtx.fillRect(0, 0, W, H);
+    
+    let bgGrad = escapeCtx.createRadialGradient(CX, CY, 0, CX, CY, W);
+    bgGrad.addColorStop(0, '#0D1117');
+    bgGrad.addColorStop(1, 'transparent');
+    escapeCtx.fillStyle = bgGrad;
     escapeCtx.fillRect(0, 0, W, H);
 
-    // 1. Нижние Зоны (Лево - WIN, Право - LOSE)
-    const zoneH = 50;
+    // Кибер-сетка
+    escapeCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    escapeCtx.lineWidth = 1;
+    escapeCtx.beginPath();
+    for(let i=0; i<=W; i+=25) { escapeCtx.moveTo(i, 0); escapeCtx.lineTo(i, H); }
+    for(let i=0; i<=H; i+=25) { escapeCtx.moveTo(0, i); escapeCtx.lineTo(W, i); }
+    escapeCtx.stroke();
+
+    // 2. Landing Zones (Frosted Glass)
+    const zoneH = 65;
     
+    // WIN Zone
     let gGrad = escapeCtx.createLinearGradient(0, H - zoneH, 0, H);
     gGrad.addColorStop(0, 'rgba(16, 185, 129, 0.0)');
-    gGrad.addColorStop(1, 'rgba(16, 185, 129, 0.3)');
+    gGrad.addColorStop(1, 'rgba(16, 185, 129, 0.35)');
     escapeCtx.fillStyle = gGrad;
     escapeCtx.fillRect(0, H - zoneH, CX, zoneH);
     escapeCtx.beginPath(); escapeCtx.moveTo(0, H - zoneH); escapeCtx.lineTo(CX, H - zoneH);
-    escapeCtx.strokeStyle = '#10B981'; escapeCtx.lineWidth = 3; escapeCtx.stroke();
-    escapeCtx.fillStyle = '#10B981'; escapeCtx.font = '900 16px sans-serif'; escapeCtx.textAlign = 'center';
-    escapeCtx.fillText('💰 WIN', CX/2, H - 20);
+    escapeCtx.strokeStyle = 'rgba(16, 185, 129, 0.8)'; escapeCtx.lineWidth = 2; escapeCtx.stroke();
+    escapeCtx.fillStyle = '#10B981'; escapeCtx.font = '900 16px "SF Pro Display", sans-serif'; escapeCtx.textAlign = 'center';
+    escapeCtx.shadowColor = '#10B981'; escapeCtx.shadowBlur = 10;
+    escapeCtx.fillText('💰 WIN', CX/2, H - 25);
+    escapeCtx.shadowBlur = 0;
 
+    // LOSE Zone
     let rGrad = escapeCtx.createLinearGradient(CX, H - zoneH, CX, H);
     rGrad.addColorStop(0, 'rgba(239, 68, 68, 0.0)');
-    rGrad.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+    rGrad.addColorStop(1, 'rgba(239, 68, 68, 0.35)');
     escapeCtx.fillStyle = rGrad;
     escapeCtx.fillRect(CX, H - zoneH, CX, zoneH);
     escapeCtx.beginPath(); escapeCtx.moveTo(CX, H - zoneH); escapeCtx.lineTo(W, H - zoneH);
-    escapeCtx.strokeStyle = '#EF4444'; escapeCtx.lineWidth = 3; escapeCtx.stroke();
-    escapeCtx.fillStyle = '#EF4444'; escapeCtx.font = '900 16px sans-serif'; escapeCtx.textAlign = 'center';
-    escapeCtx.fillText('💀 LOSE', CX + CX/2, H - 20);
+    escapeCtx.strokeStyle = 'rgba(239, 68, 68, 0.8)'; escapeCtx.lineWidth = 2; escapeCtx.stroke();
+    escapeCtx.fillStyle = '#EF4444'; escapeCtx.font = '900 16px "SF Pro Display", sans-serif'; escapeCtx.textAlign = 'center';
+    escapeCtx.shadowColor = '#EF4444'; escapeCtx.shadowBlur = 10;
+    escapeCtx.fillText('💀 LOSE', CX + CX/2, H - 25);
+    escapeCtx.shadowBlur = 0;
 
-    // 2. Вращающееся Неоновое Кольцо
+    // Лазерный разделитель
+    let laserGrad = escapeCtx.createLinearGradient(0, H-zoneH, 0, H);
+    laserGrad.addColorStop(0, 'rgba(255,255,255,0.4)'); laserGrad.addColorStop(1, 'transparent');
+    escapeCtx.beginPath(); escapeCtx.moveTo(CX, H-zoneH); escapeCtx.lineTo(CX, H);
+    escapeCtx.strokeStyle = laserGrad; escapeCtx.lineWidth = 2; escapeCtx.stroke();
+
+    // 3. Cyber Core Ring (Вращающееся)
     let currentGapStart = GAP_START + ringRotation;
     let currentGapEnd = GAP_END + ringRotation;
 
+    // Внутренние HUD-засечки
+    escapeCtx.save();
+    escapeCtx.translate(CX, CY);
+    escapeCtx.rotate(ringRotation);
+    escapeCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+    escapeCtx.lineWidth = 1.5;
+    for(let a=0; a<Math.PI*2; a+=Math.PI/18) {
+        let normA = a > Math.PI ? a - Math.PI*2 : a;
+        if (normA > GAP_START && normA < GAP_END) continue; // Не рисуем в разрыве
+        escapeCtx.beginPath();
+        escapeCtx.moveTo(Math.cos(normA)*(RING_RADIUS - 12), Math.sin(normA)*(RING_RADIUS - 12));
+        escapeCtx.lineTo(Math.cos(normA)*(RING_RADIUS - 4), Math.sin(normA)*(RING_RADIUS - 4));
+        escapeCtx.stroke();
+    }
+    escapeCtx.restore();
+
+    // Атмосферное свечение кольца
     escapeCtx.beginPath();
-    // Отрисовка сплошной части кольца
     escapeCtx.arc(CX, CY, RING_RADIUS, currentGapEnd, currentGapStart, false);
-    
-    let ringBrightness = Math.floor(Math.max(0, ringFlash) * 155);
-    escapeCtx.strokeStyle = `rgb(${59 + ringBrightness}, ${130 + ringBrightness}, 246)`; 
-    escapeCtx.lineWidth = 4 + (ringFlash > 0 ? ringFlash * 2 : 0);
+    escapeCtx.strokeStyle = 'rgba(56, 189, 248, 0.35)'; 
+    escapeCtx.lineWidth = 12;
     escapeCtx.lineCap = 'round';
-    escapeCtx.shadowColor = '#00F2FE';
+    escapeCtx.shadowColor = '#38BDF8';
+    escapeCtx.shadowBlur = 35;
+    escapeCtx.stroke();
+
+    // Главная дуга
+    escapeCtx.beginPath();
+    escapeCtx.arc(CX, CY, RING_RADIUS, currentGapEnd, currentGapStart, false);
+    let rb = Math.floor(Math.max(0, ringFlash) * 150);
+    escapeCtx.strokeStyle = `rgb(${56 + rb}, ${189 + rb}, 248)`; 
+    escapeCtx.lineWidth = 6 + (ringFlash > 0 ? ringFlash * 2 : 0);
     escapeCtx.shadowBlur = 15 + (ringFlash > 0 ? ringFlash * 20 : 0);
     escapeCtx.stroke();
     escapeCtx.shadowBlur = 0;
 
-    // Светящиеся точки на краях разрыва
-    escapeCtx.fillStyle = '#00F2FE';
-    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapStart)*RING_RADIUS, CY + Math.sin(currentGapStart)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
-    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapEnd)*RING_RADIUS, CY + Math.sin(currentGapEnd)*RING_RADIUS, 4, 0, Math.PI*2); escapeCtx.fill();
+    // LED-индикаторы на торцах разрыва
+    escapeCtx.fillStyle = '#FFFFFF';
+    escapeCtx.shadowColor = '#FFFFFF'; escapeCtx.shadowBlur = 15;
+    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapStart)*RING_RADIUS, CY + Math.sin(currentGapStart)*RING_RADIUS, 3.5, 0, Math.PI*2); escapeCtx.fill();
+    escapeCtx.beginPath(); escapeCtx.arc(CX + Math.cos(currentGapEnd)*RING_RADIUS, CY + Math.sin(currentGapEnd)*RING_RADIUS, 3.5, 0, Math.PI*2); escapeCtx.fill();
+    escapeCtx.shadowBlur = 0;
 
-    // 3. Множитель (Статичен в IDLE, иначе пульсирует)
+    // 4. Множитель (Металлический градиент)
     escapeCtx.save();
     escapeCtx.translate(CX, CY);
     escapeCtx.scale(multScale, multScale);
-    escapeCtx.fillStyle = '#FFFFFF';
-    escapeCtx.font = '900 48px "SF Pro Display", sans-serif';
+    let textGrad = escapeCtx.createLinearGradient(0, -25, 0, 25);
+    textGrad.addColorStop(0, '#FFFFFF');
+    textGrad.addColorStop(1, '#94A3B8');
+    escapeCtx.fillStyle = textGrad;
+    escapeCtx.font = '900 52px "SF Pro Display", -apple-system, sans-serif';
     escapeCtx.textAlign = 'center';
     escapeCtx.textBaseline = 'middle';
-    escapeCtx.shadowColor = '#00F2FE';
-    escapeCtx.shadowBlur = ringFlash > 0 ? ringFlash * 20 : 0;
+    escapeCtx.shadowColor = 'rgba(56, 189, 248, 0.5)';
+    escapeCtx.shadowBlur = 20 + ringFlash * 15;
     escapeCtx.fillText(escapeMultiplier.toFixed(2) + 'x', 0, 0);
     escapeCtx.restore();
 
-    // 4. Шлейф кометы
+    // 5. Шоквейвы (Ударные волны)
+    shockwaves.forEach(sw => {
+        escapeCtx.beginPath();
+        escapeCtx.arc(sw.x, sw.y, sw.radius, 0, Math.PI*2);
+        escapeCtx.strokeStyle = `rgba(56, 189, 248, ${sw.alpha})`;
+        escapeCtx.lineWidth = 2;
+        escapeCtx.stroke();
+    });
+
+    // 6. Кинематографичный шлейф (Motion Trail)
     if (trail.length > 1 && gameState !== 'IDLE') {
         escapeCtx.beginPath();
         escapeCtx.moveTo(trail[0].x, trail[0].y);
@@ -390,42 +447,47 @@ function renderGraphics() {
             escapeCtx.lineTo(trail[i].x, trail[i].y);
         }
         let grad = escapeCtx.createLinearGradient(trail[0].x, trail[0].y, trail[trail.length-1].x, trail[trail.length-1].y);
-        grad.addColorStop(0, 'rgba(0, 242, 254, 0.8)');
-        grad.addColorStop(1, 'rgba(0, 242, 254, 0.0)');
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)'); // Белое ядро
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');  // Растворяется в неон
         escapeCtx.strokeStyle = grad;
-        escapeCtx.lineWidth = BALL_RADIUS;
+        escapeCtx.lineWidth = BALL_RADIUS * 1.2;
         escapeCtx.lineCap = 'round';
         escapeCtx.lineJoin = 'round';
+        escapeCtx.shadowColor = '#38BDF8';
+        escapeCtx.shadowBlur = 10;
         escapeCtx.stroke();
+        escapeCtx.shadowBlur = 0;
     }
 
-    // 5. Искры
+    // 7. Искры
     particles.forEach(p => {
         escapeCtx.globalAlpha = Math.max(0, p.life);
         escapeCtx.fillStyle = p.color;
         escapeCtx.shadowColor = p.color;
-        escapeCtx.shadowBlur = 10;
+        escapeCtx.shadowBlur = 12;
         escapeCtx.beginPath(); escapeCtx.arc(p.x, p.y, 2.5, 0, Math.PI*2); escapeCtx.fill();
     });
     escapeCtx.globalAlpha = 1.0;
     escapeCtx.shadowBlur = 0;
 
-    // 6. Шарик
+    // 8. Шарик-Сфера (Аватар с тенями)
     escapeCtx.save();
     escapeCtx.translate(ball.x, ball.y);
     if (gameState === 'PLAYING' || gameState === 'FINISHED') {
         escapeCtx.rotate(Math.atan2(ball.vy, ball.vx));
     }
     
+    // Светящийся барьер
     escapeCtx.beginPath();
     escapeCtx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
-    escapeCtx.lineWidth = 2;
-    escapeCtx.strokeStyle = '#FFFFFF';
-    escapeCtx.shadowColor = '#00F2FE';
+    escapeCtx.lineWidth = 2.5;
+    escapeCtx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+    escapeCtx.shadowColor = '#38BDF8';
     escapeCtx.shadowBlur = 15;
     escapeCtx.stroke();
     escapeCtx.shadowBlur = 0;
     
+    // Аватарка
     escapeCtx.clip();
     if (avatarLoaded) {
         escapeCtx.drawImage(avatarImg, -BALL_RADIUS, -BALL_RADIUS, BALL_RADIUS*2, BALL_RADIUS*2);
@@ -437,21 +499,29 @@ function renderGraphics() {
         escapeCtx.fillRect(-BALL_RADIUS, -BALL_RADIUS, BALL_RADIUS*2, BALL_RADIUS*2);
         
         escapeCtx.fillStyle = '#FFFFFF';
-        escapeCtx.font = 'bold 12px sans-serif';
+        escapeCtx.font = '900 12px sans-serif';
         escapeCtx.textAlign = 'center';
         escapeCtx.textBaseline = 'middle';
         escapeCtx.fillText(initials || "U", 0, 0);
     }
+    
+    // Внутренняя тень (Inner shadow) для эффекта стеклянной сферы
+    let innerShadow = escapeCtx.createRadialGradient(0, 0, BALL_RADIUS*0.4, 0, 0, BALL_RADIUS);
+    innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
+    innerShadow.addColorStop(1, 'rgba(0,0,0,0.65)');
+    escapeCtx.fillStyle = innerShadow;
+    escapeCtx.fillRect(-BALL_RADIUS, -BALL_RADIUS, BALL_RADIUS*2, BALL_RADIUS*2);
+    
     escapeCtx.restore();
 
-    // 7. Плашка результата
+    // 9. Floating Result UI
     if (floatingUI.active && floatingUI.alpha > 0) {
         escapeCtx.globalAlpha = Math.max(0, floatingUI.alpha);
         escapeCtx.fillStyle = floatingUI.color;
-        escapeCtx.font = '900 32px "SF Pro Display", sans-serif';
+        escapeCtx.font = '900 36px "SF Pro Display", sans-serif';
         escapeCtx.textAlign = 'center';
         escapeCtx.shadowColor = floatingUI.color;
-        escapeCtx.shadowBlur = 20;
+        escapeCtx.shadowBlur = 25;
         escapeCtx.fillText(floatingUI.text, ball.x, floatingUI.y);
         escapeCtx.globalAlpha = 1.0;
         escapeCtx.shadowBlur = 0;
