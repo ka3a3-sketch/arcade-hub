@@ -18,7 +18,8 @@ from aiogram.types import MenuButtonWebApp, WebAppInfo
 
 # --- НАСТРОЙКИ ---
 TOKEN = os.getenv("BOT_TOKEN", "9015659427:AAEHv6oruPJswEq_q4_F0999F_ixYtIz538")
-ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_ID", "8340826085")) # ❗️ ВПИШИ СЮДА СВОЙ TELEGRAM ID
+# Твой ID администратора
+ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_ID", "8340826085"))
 GAME_URL = "https://ka3a3-sketch.github.io/arcade-hub/"
 
 # Настройки для работы на Render и других облачных сервисах
@@ -46,7 +47,7 @@ async def init_db():
                 referrer_id INTEGER
             )
         """)
-        # Новая таблица для заявок на вывод средств
+        # Таблица для заявок на вывод средств
         await db.execute("""
             CREATE TABLE IF NOT EXISTS withdrawals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +130,7 @@ async def api_get_balance(request):
     if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
     return web.json_response(await get_user(user_data.get("id")))
 
-# ЭНДПОИНТ ВЫВОДА СРЕДСТВ
+# --- ЭНДПОИНТ ВЫВОДА СРЕДСТВ ---
 async def api_withdraw(request):
     user_data = validate_telegram_data(request.headers.get("Authorization", ""))
     if not user_data: return web.json_response({"error": "Unauthorized"}, status=401)
@@ -145,7 +146,7 @@ async def api_withdraw(request):
         return web.json_response({"error": "Некорректный адрес кошелька"}, status=400)
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Атомарное списание баланса
+        # Атомарное списание баланса (защита от багов с минусом)
         cursor = await db.execute(
             "UPDATE users SET balance = balance - ? WHERE user_id = ? AND balance >= ?",
             (amount, user_id, amount)
@@ -161,7 +162,7 @@ async def api_withdraw(request):
         withdraw_id = cursor.lastrowid
         await db.commit()
         
-        # Получаем обновленный баланс
+        # Получаем обновленный баланс для фронта
         cursor = await db.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         new_bal = (await cursor.fetchone())[0]
 
@@ -297,13 +298,40 @@ async def cmd_start(message: types.Message):
     builder.adjust(1)
     await message.answer("Привет! Добро пожаловать в Arcade Hub.\nИгры на баланс GRAM.", reply_markup=builder.as_markup())
 
+# --- ТЕСТОВАЯ АДМИН-КОМАНДА ДЛЯ НАЧИСЛЕНИЯ БАЛАНСА ---
+@dp.message(Command("addbalance"))
+async def cmd_addbalance(message: types.Message):
+    # Проверка: команду может использовать только Администратор (Твой ID)
+    if message.from_user.id != ADMIN_TELEGRAM_ID:
+        return await message.answer("⛔️ У вас нет прав для этой команды.")
+    
+    args = message.text.split()
+    if len(args) < 2:
+        return await message.answer("🛠 **Использование:** `/addbalance [сумма]`\nПример: `/addbalance 500`", parse_mode="Markdown")
+        
+    try:
+        amount = float(args[1])
+        user_id = message.from_user.id
+        
+        # Начисляем деньги на реальный баланс
+        new_bal = await update_balance(user_id, amount, is_demo=False)
+        
+        await message.answer(
+            f"✅ **Успешно!**\nТестовые средства зачислены.\n\n"
+            f"➕ Добавлено: `{amount} GRAM`\n"
+            f"💰 Твой новый реальный баланс: `{new_bal} GRAM`",
+            parse_mode="Markdown"
+        )
+    except ValueError:
+        await message.answer("❌ Ошибка: сумма должна быть числом (например, 100 или 150.5).")
+
 @dp.callback_query(lambda c: c.data == "deposit_ton")
 async def process_payments(callback: types.CallbackQuery):
     text = "Пополнение доступно прямо внутри Web App приложения. Откройте игру и перейдите в Профиль -> Пополнить."
     await callback.message.answer(text, parse_mode="Markdown")
     await callback.answer()
 
-# ОБРАБОТЧИК АДМИНСКИХ КНОПОК ВЫВОДА
+# --- ОБРАБОТЧИК АДМИНСКИХ КНОПОК ВЫВОДА СРЕДСТВ ---
 @dp.callback_query(lambda c: c.data.startswith("wd_"))
 async def process_withdrawal_admin(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_TELEGRAM_ID:
@@ -332,7 +360,7 @@ async def process_withdrawal_admin(callback: types.CallbackQuery):
             await callback.message.edit_text(f"{callback.message.text}\n\n**СТАТУС:** ✅ ВЫПОЛНЕНА")
             
         elif action == "reject":
-            # Меняем статус и возвращаем деньги на баланс
+            # Меняем статус и возвращаем деньги на игровой баланс
             await db.execute("UPDATE withdrawals SET status = 'rejected' WHERE id = ?", (wd_id,))
             await db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
             await db.commit()
@@ -350,7 +378,7 @@ async def main():
     app = web.Application()
     app.router.add_get('/api/balance', api_get_balance)
     app.router.add_post('/api/deposit', api_deposit)
-    app.router.add_post('/api/withdraw', api_withdraw) # Добавлен роут
+    app.router.add_post('/api/withdraw', api_withdraw) # Регистрация роута вывода
     app.router.add_post('/api/mines/start', api_mines_start)
     app.router.add_post('/api/mines/click', api_mines_click)
     app.router.add_post('/api/mines/cashout', api_mines_cashout)
@@ -377,5 +405,5 @@ if __name__ == "__main__":
     try:
         import aiohttp_cors
     except ImportError:
-        import sys; print("Установите aiohttp_cors"); sys.exit(1)
+        import sys; print("Установите aiohttp_cors. pip install aiohttp_cors"); sys.exit(1)
     asyncio.run(main())
